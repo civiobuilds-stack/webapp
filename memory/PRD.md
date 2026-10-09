@@ -39,7 +39,19 @@ audit logs. Premium forest-green "CIVIO BUILD" design, mobile-first for engineer
 - Private photo upload/download (Object Storage) with per-project access checks; project photo gallery.
 - In-app notification centre (bell + page, mark read/all). Audit log tab (manager only). Role-aware dashboard summary.
 - Seeded demo project (Kapoor Residence, CIV-RES-001) with pending client decision + escalated defect.
-- Verified by testing agent (backend 24/25 → 25/25 after fix; all frontend flows passed).
+- Verified by testing agent (backend 25/25; all frontend flows passed).
+
+## Implemented (2026-06, Stage 2 — Authorization Hardening) ✅
+- Backend authorization audit: single project-level gate `get_project_or_403` on every read/write.
+- Hardened: file upload requires write access (blocks clients); orphan files restricted to uploader/managers; progress-revise re-checks project membership.
+- Verified by testing agent: 47/47 authorization/IDOR tests pass. Regression suite `tests/test_authorization.py`.
+
+## Implemented (2026-06, Stage 3 — Reports, Procurement, Scoping, Audit Export) ✅
+- **PDF Reports** (`reports.py`, reportlab): Civio-branded Progress / Completion / Cost reports from live data — project header, activity/milestone/defect tables, dated site photos, cost summary, completion sign-off block, page footer (timestamp, revision id, page numbers). Stored in Object Storage; historical revisions preserved; list + download (`?auth=` token); client can download published reports; generation notifies client.
+- **Procurement & Cost**: material requests (engineer raise → PM authorize/reject), suppliers, purchase orders with line items (amount = qty×rate, PO numbers), PO + invoice status tracking, INR cost summary (budget / committed / actual / forecast / variance). Client sees procurement only if `client_budget_visible`.
+- **Shared-Photo Scoping**: clients only see photos on approved or pending-decision updates and closed-defect photos (`client_visible_file_ids`), enforced on both the gallery and file download.
+- **Audit CSV Export**: admin-only timestamped CSV of the project audit log.
+- Verified by testing agent: 36/36 new-feature tests pass, 100% backend + frontend. Suite `tests/test_civio_new_features.py`.
 
 ## Backlog / remaining
 ### P0 (next stage)

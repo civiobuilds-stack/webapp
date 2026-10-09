@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration-3 testing of the four new CIVIO BUILD features (PDF Reports, Procurement & Cost, Shared-Photo Scoping, Audit CSV Export). Added /app/backend/tests/test_civio_new_features.py (36 pytest tests, 100% pass against production REACT_APP_BACKEND_URL). Also smoke-tested the frontend tabs for PM/Admin/Client — all data-testids present, correct visibility (Procurement+Reports visible to client with client_budget_visible=true, Audit tab hidden from client, export-audit-csv-btn only visible to admin and fetches a well-formed CSV).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_civio_new_features.py",
+    "/app/test_reports/pytest/new_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "cost_summary: committed sums approved/ordered/delivered/accepted POs and actual sums all paid POs regardless of status — behaviour matches review spec; a cancelled+paid PO (unlikely but possible) would still contribute to actual. Minor edge case worth noting but not a bug.",
+    "download_report currently calls get_project_or_403 without write=True — correct: clients linked to the project may download. Good.",
+    "generate_report uses get_project_or_403(..., write=True) which also blocks clients — but role gate require_roles('admin','project_manager') already blocks engineers/clients, so the write check is defence-in-depth. Fine.",
+    "download_file: elif branch for orphan files allows uploader OR MANAGER_ROLES. Note photos belonging to a NEW submitted (not approved) progress update are still project-scoped — correctly 403'd for client by the client_visible_file_ids filter (verified).",
+    "export_audit_csv ?auth= path (needed because <a> cannot send Authorization header): decode_token raises Exception on invalid tokens, which is caught and converted to 401 — verified.",
+    "update_po_status does not validate that delivered_qty <= ordered or accepted_qty <= delivered — not a security issue but a business-rule gap worth noting.",
+    "server.py is now 1275 lines (grew from 874) — well past the 700-line guideline. Strongly recommend splitting into routers (procurement, reports, audit) for maintainability. Non-blocking.",
+    "PO creation does not re-validate that supplier belongs to company_id='civio' (list_suppliers filters by civio, but create does not). Low-risk in a single-tenant deployment but should scope by tenant if the app goes multi-tenant.",
+    "material-requests list applies the client_budget_visible gate but requests endpoint is only visible to engineers/managers for creation. Reasonable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_civio_new_features.py (new, 36 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (36/36 new-feature tests pass)", "frontend": "100% (PM/Admin/Client UI smoke tests all green)"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md — all 5 seeded accounts login OK. Suite also creates a fresh 'outsider PM' via admin POST /users each run to prove cross-project MR authorization.",
+  "seed_data_creation": "Each run creates: 3 TEST material requests on proj-demo-1 (one authorized, one rejected, one left requested), 1 TEST supplier, 1 TEST purchase order (approved, cement+sand items), 3 PDF reports (progress/completion/cost — PRO-xx, COM-xx, COS-xx revisions), 1 extra submitted progress update on act-3 with a TEST photo (used to prove the client cannot see unapproved photos), and 1 outsider PM user. These TEST artefacts accumulate — a maintenance cleanup script would be nice but is not blocking.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Three regression files now cover the backend end-to-end: tests/test_civio_backend.py (core workflow), tests/test_authorization.py (RBAC/IDOR, 47 tests), tests/test_civio_new_features.py (iteration-3, 36 tests). All run against REACT_APP_BACKEND_URL. On the frontend, the four new features are wired up and all key data-testids are present (procurement-no-access, cost-{budget,committed,actual,forecast,variance}, material-request-row, authorize-mr-btn, reject-mr-btn, new-material-request-btn, submit-mr-btn, po-row, new-po-btn, submit-po-btn, po-status-select, po-invoice-select, add-supplier-btn, generate-report-btn, confirm-generate-report, report-row, download-report-btn, export-audit-csv-btn, audit-entry, tab-procurement, tab-reports). Note the demo project is mutated by test runs (extra MRs, POs, reports, PU on act-3). If a pristine state is needed, drop mongo collections and restart backend to re-seed.",
+  "rca of the issue": "No issues surfaced in iteration-3. All four features (PDF Reports, Procurement & Cost, Client Photo Scoping, Audit CSV Export) behave per spec: PDF downloads start with %PDF, cost math matches seeded expectations (committed ≥ 1,036,000 and actual ≥ 492,000 against the two seeded POs; variance = budget − forecast), client is blocked from unapproved-update photos (upload+submit+fetch flow verified), admin-only CSV export carries the required Content-Type/Content-Disposition/header-row and supports both Bearer and ?auth= token modes, and role gates (engineer/client cannot generate reports, cannot create/update POs, cannot create material requests, cannot export audit) all return 403."
+}
