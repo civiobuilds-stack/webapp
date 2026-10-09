@@ -1,0 +1,45 @@
+{
+  "summary": "First-round full-stack testing of CIVIO BUILD core foundation. Backend pytest suite: 25 tests, 24 passing (96%). One real backend bug found: POST /api/defects/{seeded-def-1}/status crashes with 500 (KeyError: 'reported_by') because seed.py defects omit the 'reported_by' field but server.py line 715 tries to notify d['reported_by']. Frontend: all demo logins work, project detail with 7 tabs renders, engineer submit-progress dialog, PM approve/return/reject, client decision with MANDATORY comment ('A comment is required.' validation displays), raise-defect dialog with severity, and audit log all verified end-to-end. Weighted progress recompute verified correct (project pct matches weighted formula over activities).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/defects/{defect_id}/status (seeded def-1 and def-2)",
+        "issue": "500 Internal Server Error. seed.py creates def-1/def-2 without a 'reported_by' field, and server.py update_defect_status line ~715 calls `await notify(d['reported_by'], ...)` → KeyError: 'reported_by'. Newly-created defects via API DO include reported_by so they transition fine, but the two seeded demo defects cannot have their status changed through the API or the UI.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_civio_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "FIX seed.py: add 'reported_by': 'user-pm' (and for def-2 'user-eng2') to the seeded defect documents so status transitions on demo data don't 500. Alternatively, in server.py update_defect_status use d.get('reported_by') and skip notify if missing. Since the DB has already been seeded, a one-time migration or a check `if await db.defects.find_one(...reported_by: null)` would be needed, OR drop the demo collections and let the seeder recreate.",
+    "Consider adding reported_by defensively with .get() in all notify() calls for resilience against legacy data."
+  ],
+  "critical_code_review_comments": [
+    "server.py update_defect_status: uses d['reported_by'] without .get() — defensive coding would prevent 500s on legacy records.",
+    "server.py recompute_project_progress returns a value but is sometimes awaited without using it; harmless.",
+    "download_file: when both Authorization header and ?auth= are provided, only Authorization is honoured; acceptable, documented behaviour.",
+    "server.py line ~862: CORS middleware is attached AFTER include_router — in Starlette this still works for responses but by convention middlewares should be registered before routing. Not a bug but a minor style issue.",
+    "No rate limiting / brute-force lockout on /auth/login (playbook mentioned 5-fail lockout) — not implemented. Report but low priority for core foundation.",
+    "server.py file size is ~865 lines; approaching the 700-line split threshold, consider splitting into routers (auth, projects, progress, defects, files, notifications) for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (new)",
+    "/app/backend/tests/test_civio_backend.py (new)"
+  ],
+  "success_rate": {"backend": "96% (24/25 pytest cases pass; 1 reveals real server bug)", "frontend": "100% of tested flows (login all 4 roles, project detail tabs, engineer submit dialog, PM review buttons, client approve dialog + mandatory-comment validation, raise defect dialog with severity, audit log)"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md (admin/pm/engineer/engineer2/client — all working).",
+  "seed_data_creation": "Tests create ephemeral TEST_* projects and TEST defects via API; demo project proj-demo-1 progress state was advanced: act-3 moved from 40% → 55% (approved via test flow) and def-1 moved from in_progress → awaiting_verification. Weighted project progress is therefore now ~45.8% instead of the originally-seeded 43.5%.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_civio_backend.py is comprehensive and uses pytest + pytest-xdist. Run with: `cd /app/backend && python -m pytest tests/test_civio_backend.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. The ONE failing case was `TestDefects::test_pm_can_transition_defect` due to the KeyError bug above — once seed.py (or server.py) is fixed, drop db.defects and restart backend to re-seed, then re-run. Note the demo project state has been mutated by prior test runs (act-3 progress at 55%). The engineer2 user is seeded on the demo project, so the RBAC isolation test uses a NEW TEST project to prove engineer2 is excluded.",
+  "rca of the issue": "RCA: In backend/seed.py the two demo defects (def-1 line ~103, def-2 line ~117) do not set a `reported_by` field. In backend/server.py `update_defect_status` (line ~715) performs `await notify(d['reported_by'], ...)` after a status transition. For any defect whose document lacks `reported_by` this raises KeyError → FastAPI returns 500. Reproduction: login as PM, POST /api/defects/def-1/status {\"status\":\"awaiting_verification\",\"note\":\"x\"} → 500. Mitigation (choice of): (a) In seed.py add `'reported_by': 'user-pm'` to def-1 and `'reported_by': 'user-eng2'` to def-2 and reseed; (b) In server.py replace d['reported_by'] with d.get('reported_by') and wrap the notify in an `if reporter_id:` guard. Option (b) is strictly safer and should be adopted in addition to fixing the seed."
+}

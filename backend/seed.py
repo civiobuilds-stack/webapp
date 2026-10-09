@@ -105,7 +105,7 @@ async def seed_all(db, hash_password, now_iso):
         "location": "Basement — North retaining wall", "category": "Waterproofing", "severity": "critical",
         "description": "Water seepage observed along construction joint during monsoon test.",
         "responsible_party": "Waterproofing subcontractor", "corrective_action": "Inject PU grout and apply crystalline coating.",
-        "assigned_to": "user-eng", "target_date": iso(7), "status": "in_progress", "escalated": True,
+        "reported_by": "user-pm", "assigned_to": "user-eng", "target_date": iso(7), "status": "in_progress", "escalated": True,
         "before_photo_ids": [], "closure_photo_ids": [], "verification_notes": None,
         "reviewed_by": None, "closure_date": None, "created_at": now_iso(),
         "history": [
@@ -118,7 +118,7 @@ async def seed_all(db, hash_password, now_iso):
         "id": "def-2", "project_id": project["id"], "defect_code": "DEF-002",
         "location": "2nd Floor — Master bedroom", "category": "Finishing", "severity": "minor",
         "description": "Plaster surface uneven near window reveal.", "responsible_party": "Mason team",
-        "corrective_action": "Re-plaster and sand to level.", "assigned_to": "user-eng2",
+        "corrective_action": "Re-plaster and sand to level.", "reported_by": "user-eng2", "assigned_to": "user-eng2",
         "target_date": iso(3), "status": "awaiting_verification", "escalated": False,
         "before_photo_ids": [], "closure_photo_ids": [], "verification_notes": None,
         "reviewed_by": None, "closure_date": None, "created_at": now_iso(),

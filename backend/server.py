@@ -712,7 +712,9 @@ async def update_defect_status(defect_id: str, body: DefectStatusIn, user: dict 
         "$push": {"history": {"status": body.status, "by": user["name"], "at": ts, "note": body.note}},
     })
     await log_audit(d["project_id"], user, f"defect status -> {body.status}", "defect", defect_id, body.note)
-    await notify(d["reported_by"], "defect", f"Defect {d['defect_code']} is now {body.status.replace('_', ' ')}.", d["project_id"])
+    reporter_id = d.get("reported_by")
+    if reporter_id:
+        await notify(reporter_id, "defect", f"Defect {d['defect_code']} is now {body.status.replace('_', ' ')}.", d["project_id"])
     d = await db.defects.find_one({"id": defect_id}, {"_id": 0})
     return await enrich_defect(d)
 
