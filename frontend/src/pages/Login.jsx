@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth, apiError } from "@/context/AuthContext";
+import OtpVerify from "@/components/OtpVerify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,14 +21,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState("login");
+  const [pendingEmail, setPendingEmail] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
     setErr(""); setBusy(true);
     try { await login(email, password); navigate("/"); }
-    catch (e) { setErr(apiError(e.response?.data?.detail) || e.message); }
+    catch (e) {
+      const d = e.response?.data?.detail;
+      if (e.response?.status === 403 && d?.code === "email_not_verified") {
+        setPendingEmail(d.email || email.toLowerCase());
+        setStage("otp");
+      } else { setErr(apiError(d) || e.message); }
+    }
     finally { setBusy(false); }
   };
+
+  if (stage === "otp") return <OtpVerify email={pendingEmail} onVerified={() => navigate("/")} />;
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">

@@ -99,6 +99,7 @@ function AddPersonDialog({ isAdmin, onCreated }) {
 
   const submit = async () => {
     if (!form.name || !form.email) { toast.error("Name and email are required."); return; }
+    if ((form.phone || "").trim().length < 6) { toast.error("A phone number is required."); return; }
     setBusy(true);
     try {
       await api.post("/users", form);
@@ -140,13 +141,13 @@ function AddPersonDialog({ isAdmin, onCreated }) {
               </div>
               <div className="space-y-1.5"><Label>Full name</Label><Input value={form.name} onChange={set("name")} data-testid="person-name-input" /></div>
               <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} data-testid="person-email-input" /></div>
-              <div className="space-y-1.5"><Label>Phone (optional)</Label><Input value={form.phone} onChange={set("phone")} /></div>
+              <div className="space-y-1.5"><Label>Phone number</Label><Input value={form.phone} onChange={set("phone")} required placeholder="+91 ..." data-testid="person-phone-input" /></div>
               <div className="space-y-1.5"><Label>Temporary password</Label>
                 <div className="flex gap-2">
                   <Input value={form.password} onChange={set("password")} data-testid="person-password-input" />
                   <Button type="button" variant="outline" onClick={() => setForm({ ...form, password: genPassword() })}>New</Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Share this with the person; they can sign in immediately.</p>
+              <p className="text-xs text-muted-foreground">A 6-digit verification code will be emailed to them; they verify it on first sign-in.</p>
               </div>
             </div>
             <DialogFooter><Button onClick={submit} disabled={busy} data-testid="create-person-submit">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}</Button></DialogFooter>
@@ -155,7 +156,7 @@ function AddPersonDialog({ isAdmin, onCreated }) {
           <>
             <DialogHeader><DialogTitle>Account ready ✅</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Share these sign-in details with <b>{created.name}</b> ({ROLE_LABEL[created.role]}).</p>
+              <p className="text-sm text-muted-foreground">Share these sign-in details with <b>{created.name}</b> ({ROLE_LABEL[created.role]}). We've emailed them a 6-digit code to verify on first sign-in.</p>
               <div className="rounded-xl border bg-muted/40 p-4 font-mono text-sm" data-testid="created-credentials">
                 <div><span className="text-muted-foreground">Email:</span> {created.email}</div>
                 <div><span className="text-muted-foreground">Password:</span> {created.password}</div>

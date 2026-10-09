@@ -17,11 +17,21 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // Returns { requires_verification, email } — does NOT log the user in.
   const register = async (payload) => {
     const { data } = await api.post("/auth/register", payload);
+    return data;
+  };
+
+  const verifyOtp = async (email, code) => {
+    const { data } = await api.post("/auth/verify-otp", { email, code });
     setToken(data.access_token);
     setUser(data.user);
     return data.user;
+  };
+
+  const resendOtp = async (email) => {
+    await api.post("/auth/resend-otp", { email });
   };
 
   const logout = async () => {
@@ -31,7 +41,11 @@ export function AuthProvider({ children }) {
     window.location.href = "/login";
   };
 
-  return <AuthContext.Provider value={{ user, setUser, login, register, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, setUser, login, register, verifyOtp, resendOtp, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthContext);

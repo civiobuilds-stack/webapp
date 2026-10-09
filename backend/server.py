@@ -19,8 +19,10 @@ from auth import hash_password, verify_password, create_access_token, decode_tok
 import storage
 import seed as seed_module
 import reports as reports_module
+import emailer
 import csv
 import io
+import random
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -144,12 +146,22 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str
+    phone: str = Field(min_length=6)
     role: str = "client"
 
 
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+
+
+class OtpVerifyIn(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class OtpResendIn(BaseModel):
+    email: EmailStr
 
 
 class UserCreateIn(BaseModel):
@@ -302,6 +314,22 @@ def set_auth_cookie(response: Response, token: str):
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=43200, path="/")
 
 
+OTP_TTL_MIN = 10
+
+
+async def issue_otp(user_doc: dict):
+    code = f"{random.randint(0, 999999):06d}"
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=OTP_TTL_MIN)).isoformat()
+    await db.users.update_one({"id": user_doc["id"]}, {"$set": {
+        "otp_code": code, "otp_expires": expires, "otp_attempts": 0,
+    }})
+    await emailer.send_email(
+        to=user_doc["email"],
+        subject="Your CIVIO verification code",
+        html=emailer.otp_email_html(user_doc["name"], code),
+    )
+
+
 @api_router.post("/auth/register")
 async def register(body: RegisterIn, response: Response):
     email = body.email.lower()
@@ -312,13 +340,50 @@ async def register(body: RegisterIn, response: Response):
     uid = new_id()
     doc = {
         "id": uid, "email": email, "password_hash": hash_password(body.password),
-        "name": body.name, "role": body.role, "phone": None,
-        "company_id": "civio", "is_active": True, "is_demo": False, "created_at": now_iso(),
+        "name": body.name, "role": body.role, "phone": body.phone,
+        "company_id": "civio", "is_active": True, "is_demo": False,
+        "email_verified": False, "created_at": now_iso(),
     }
     await db.users.insert_one(doc)
-    token = create_access_token(uid, email, body.role)
+    await issue_otp(doc)
+    return {"requires_verification": True, "email": email}
+
+
+@api_router.post("/auth/verify-otp")
+async def verify_otp(body: OtpVerifyIn, response: Response):
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    if user.get("email_verified"):
+        token = create_access_token(user["id"], email, user["role"])
+        set_auth_cookie(response, token)
+        return {"access_token": token, "user": public_user(user)}
+    if not user.get("otp_code") or not user.get("otp_expires"):
+        raise HTTPException(status_code=400, detail="No active code. Please request a new one.")
+    if user.get("otp_attempts", 0) >= 6:
+        raise HTTPException(status_code=429, detail="Too many attempts. Please request a new code.")
+    if datetime.now(timezone.utc) > datetime.fromisoformat(user["otp_expires"]):
+        raise HTTPException(status_code=400, detail="This code has expired. Please request a new one.")
+    if body.code.strip() != user["otp_code"]:
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"otp_attempts": 1}})
+        raise HTTPException(status_code=400, detail="Incorrect code. Please try again.")
+    await db.users.update_one({"id": user["id"]}, {
+        "$set": {"email_verified": True},
+        "$unset": {"otp_code": "", "otp_expires": "", "otp_attempts": ""},
+    })
+    token = create_access_token(user["id"], email, user["role"])
     set_auth_cookie(response, token)
-    return {"access_token": token, "user": public_user(doc)}
+    return {"access_token": token, "user": public_user(user)}
+
+
+@api_router.post("/auth/resend-otp")
+async def resend_otp(body: OtpResendIn):
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email})
+    if user and not user.get("email_verified"):
+        await issue_otp(user)
+    return {"ok": True}
 
 
 @api_router.post("/auth/login")
@@ -327,6 +392,10 @@ async def login(body: LoginIn, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+    if user.get("email_verified") is False:
+        await issue_otp(user)
+        raise HTTPException(status_code=403, detail={"code": "email_not_verified", "email": email,
+                                                     "message": "Please verify your email. We've sent you a new code."})
     token = create_access_token(user["id"], email, user["role"])
     set_auth_cookie(response, token)
     return {"access_token": token, "user": public_user(user)}
@@ -364,14 +433,20 @@ async def create_user(body: UserCreateIn, user: dict = Depends(require_roles("ad
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
+    if body.role in {"site_engineer", "client"} and not (body.phone and len(body.phone) >= 6):
+        raise HTTPException(status_code=400, detail="A phone number is required for engineers and clients.")
     uid = new_id()
     doc = {
         "id": uid, "email": email, "password_hash": hash_password(body.password),
         "name": body.name, "role": body.role, "phone": body.phone,
-        "company_id": "civio", "is_active": True, "is_demo": False, "created_at": now_iso(),
+        "company_id": "civio", "is_active": True, "is_demo": False,
+        "email_verified": False, "created_at": now_iso(),
     }
     await db.users.insert_one(doc)
-    return public_user(doc)
+    await issue_otp(doc)
+    out = public_user(doc)
+    out["requires_verification"] = True
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1188,9 +1263,24 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
     }
     await db.reports.insert_one(doc)
     await log_audit(project_id, user, "generated report", "report", rid, f"{titles[body.type]} ({revision})")
-    if project.get("client_id"):
-        await notify(project["client_id"], "report", f"A new report was published: {titles[body.type]}.", project_id)
+    # Notify + email client and assigned engineers with the PDF attached.
+    recipient_ids = list(filter(None, [project.get("client_id")] + project.get("engineer_ids", [])))
+    recipients = await db.users.find({"id": {"$in": recipient_ids}}, {"_id": 0}).to_list(100)
+    emailed = []
+    attachment = emailer.pdf_attachment(f"{titles[body.type].replace(' ', '_')}_{revision}.pdf", pdf_bytes)
+    for r in recipients:
+        await notify(r["id"], "report", f"A new report was published: {titles[body.type]}.", project_id)
+        if r.get("email"):
+            mid = await emailer.send_email(
+                to=r["email"],
+                subject=f"{titles[body.type]} — {project.get('name', 'CIVIO project')}",
+                html=emailer.report_email_html(r["name"], project.get("name", ""), titles[body.type], revision),
+                attachments=[attachment],
+            )
+            if mid:
+                emailed.append(r["email"])
     doc.pop("_id", None)
+    doc["emailed_to"] = emailed
     return doc
 
 
@@ -1268,6 +1358,8 @@ async def startup():
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
     await seed_module.seed_all(db, hash_password, now_iso)
+    # Legacy/demo accounts predate OTP — mark them verified so they remain usable.
+    await db.users.update_many({"email_verified": {"$exists": False}}, {"$set": {"email_verified": True}})
 
 
 @app.on_event("shutdown")

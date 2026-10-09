@@ -13,7 +13,7 @@ async def seed_all(db, hash_password, now_iso):
         admin = {
             "id": "user-admin", "email": admin_email, "password_hash": hash_password(admin_password),
             "name": "Civio Owner", "role": "admin", "phone": None, "company_id": "civio",
-            "is_active": True, "is_demo": False, "created_at": now_iso(),
+            "is_active": True, "is_demo": False, "email_verified": True, "created_at": now_iso(),
         }
         await db.users.insert_one(admin)
     elif not _ok(admin_password, admin["password_hash"]):
@@ -26,7 +26,7 @@ async def seed_all(db, hash_password, now_iso):
     def u(uid, email, name, role, pwd, phone=None):
         return {"id": uid, "email": email, "password_hash": hash_password(pwd), "name": name,
                 "role": role, "phone": phone, "company_id": "civio", "is_active": True,
-                "is_demo": True, "created_at": now_iso()}
+                "is_demo": True, "email_verified": True, "created_at": now_iso()}
 
     demo_users = [
         u("user-pm", "pm@civio.build", "Rajesh Nair (PM)", "project_manager", "CivioPM@2026", "+91 98200 11111"),

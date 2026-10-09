@@ -1,27 +1,34 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth, apiError } from "@/context/AuthContext";
+import OtpVerify from "@/components/OtpVerify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { HardHat, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "client" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", role: "client" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState("form");
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async (e) => {
     e.preventDefault();
+    if ((form.phone || "").trim().length < 6) { setErr("Please enter a valid phone number."); return; }
     setErr(""); setBusy(true);
-    try { await register(form); navigate("/"); }
-    catch (e) { setErr(apiError(e.response?.data?.detail) || e.message); }
+    try {
+      await register(form);
+      setStage("otp");
+    } catch (e) { setErr(apiError(e.response?.data?.detail) || e.message); }
     finally { setBusy(false); }
   };
+
+  if (stage === "otp") return <OtpVerify email={form.email.toLowerCase()} onVerified={() => navigate("/")} />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -35,6 +42,8 @@ export default function Register() {
             <Input value={form.name} onChange={set("name")} required data-testid="register-name-input" /></div>
           <div className="space-y-1.5"><Label>Email</Label>
             <Input type="email" value={form.email} onChange={set("email")} required data-testid="register-email-input" /></div>
+          <div className="space-y-1.5"><Label>Phone number</Label>
+            <Input type="tel" value={form.phone} onChange={set("phone")} required placeholder="+91 ..." data-testid="register-phone-input" /></div>
           <div className="space-y-1.5"><Label>Password</Label>
             <Input type="password" value={form.password} onChange={set("password")} required minLength={6} data-testid="register-password-input" /></div>
           <div className="space-y-1.5"><Label>I am a</Label>
