@@ -9,6 +9,7 @@ import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
+import People from "@/pages/People";
 import Notifications from "@/pages/Notifications";
 
 function Shell({ children }) {
@@ -26,6 +27,7 @@ function App() {
             <Route path="/" element={<Shell><Dashboard /></Shell>} />
             <Route path="/projects" element={<Shell><Projects /></Shell>} />
             <Route path="/projects/:id" element={<Shell><ProjectDetail /></Shell>} />
+            <Route path="/people" element={<Shell><People /></Shell>} />
             <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
           </Routes>
         </BrowserRouter>

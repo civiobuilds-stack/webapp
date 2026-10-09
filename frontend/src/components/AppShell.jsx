@@ -9,12 +9,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/projects", label: "Projects", icon: FolderKanban, testid: "nav-projects" },
+  { to: "/people", label: "People", icon: Users, testid: "nav-people", managerOnly: true },
   { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
 ];
 
@@ -28,11 +29,12 @@ export function AppShell({ children }) {
   const loadUnread = () => api.get("/notifications").then((r) => setUnread(r.data.unread)).catch(() => {});
   useEffect(() => { loadUnread(); }, [loc.pathname]);
 
+  const manager = user?.role === "admin" || user?.role === "project_manager";
   const initials = (user?.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   const NavLinks = ({ onClick }) => (
     <nav className="flex flex-col gap-1">
-      {NAV.map((n) => {
+      {NAV.filter((n) => !n.managerOnly || manager).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (
           <Link key={n.to} to={n.to} onClick={onClick} data-testid={n.testid}
