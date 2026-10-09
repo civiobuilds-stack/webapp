@@ -604,6 +604,8 @@ async def revise_progress(pu_id: str, body: ReviseIn, user: dict = Depends(requi
         raise HTTPException(status_code=404, detail="Update not found")
     if old["engineer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="You can only revise your own submissions.")
+    # Re-verify the engineer is still assigned to the project.
+    await get_project_or_403(old["project_id"], user, write=True)
     if old["status"] not in {"clarification_needed", "rejected"}:
         raise HTTPException(status_code=400, detail="Only returned or rejected updates can be revised.")
     project = await db.projects.find_one({"id": old["project_id"]}, {"_id": 0})
@@ -726,7 +728,10 @@ async def update_defect_status(defect_id: str, body: DefectStatusIn, user: dict 
 async def upload_file(file: UploadFile = File(...), project_id: str = Form(None), caption: str = Form(""),
                       user: dict = Depends(get_current_user)):
     if project_id:
-        await get_project_or_403(project_id, user)
+        # Uploading into a project is a write — clients (read-only) are rejected here.
+        await get_project_or_403(project_id, user, write=True)
+    elif user["role"] == "client":
+        raise HTTPException(status_code=403, detail="Clients cannot upload files.")
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
     fid = new_id()
     path = f"{storage.APP_NAME}/uploads/{user['id']}/{fid}.{ext}"
@@ -778,6 +783,8 @@ async def download_file(file_id: str, request: Request, auth: str = Query(None))
         raise HTTPException(status_code=404, detail="File not found")
     if record.get("project_id"):
         await get_project_or_403(record["project_id"], user)
+    elif record.get("uploaded_by") != user["id"] and user["role"] not in MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="You cannot access this file.")
     data, ctype = storage.get_object(record["storage_path"])
     return Response(content=data, media_type=record.get("content_type", ctype))
 
