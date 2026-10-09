@@ -1,0 +1,34 @@
+{
+  "summary": "Focused authorization / IDOR audit on CIVIO BUILD backend. Added /app/backend/tests/test_authorization.py (47 tests, all passing — 100%). Verified role-based + project-level access control across every read and write surface described in the review: project list/get IDOR, engineer-only-assigned, client-only-linked, outsider users (freshly registered client + engineer with no project link), client write restrictions on activities/milestones/defects/progress/upload, progress-update object-level auth (foreign PM cannot review, foreign client cannot decide, foreign engineer cannot revise someone else's update), defect object-level auth (outsider cannot change status, engineer cannot close), file access control (project file blocked for outsiders, PM can download, orphan file only uploader/manager), sub-resource reads 403 for outsiders, dashboard summary scoped to caller's projects, and positive paths (admin create+assign engineer+client, PM review on own project).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_authorization.py",
+    "/app/test_reports/pytest/authz_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "get_project_or_403 is a clean single-point gate — admin all, PM only own/created, engineer only assigned, client only linked and never on write. Correctly enforced on every sub-resource.",
+    "upload_file now gates project uploads via get_project_or_403(write=True) and additionally refuses clients on orphan uploads — both branches verified.",
+    "download_file now restricts orphan files to uploader OR MANAGER_ROLES only — verified: engineer and outsider client both get 403.",
+    "revise_progress re-checks get_project_or_403(write=True) in addition to the engineer_id ownership check — verified: an engineer removed from a project (outsider engineer) cannot revise.",
+    "update_defect_status requires write access to the owning project and only admin/PM may close — both verified.",
+    "client_decision verifies project.client_id == user.id directly (not get_project_or_403, which blocks client writes). This is the correct approach for this specific flow and still blocks the IDOR.",
+    "Pre-existing (iteration-1) issue of KeyError on seeded defects without reported_by appears already addressed — PM transition on def-1 now works via test_civio_backend.py suite (not re-validated here, but no new 500s surfaced during authz tests).",
+    "Minor: dashboard_summary calls list_projects() which runs through the FastAPI dependency path — fine, but direct DB query would be cheaper. Not a security issue.",
+    "server.py is 874 lines — still over the 700-line recommended split threshold; splitting into routers would help maintainability but is non-blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_authorization.py (new, 47 tests)"
+  ],
+  "success_rate": {"backend": "100% (47/47 authz tests pass)", "frontend": "not tested per request"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md — all 5 seeded accounts (admin/pm/eng/eng2/client) login OK. Suite also registers two fresh TEST accounts (outsider client + outsider engineer, @civio.build) each run to prove cross-tenant isolation.",
+  "seed_data_creation": "Each run creates: 1 isolated TEST project (admin, no assignments), 1 positive-path TEST project (admin → engineer+client assigned), 2 ephemeral user accounts (test_outclient_<uid>@civio.build, test_outeng_<uid>@civio.build) and 1 TEST PM (test_pm2_<uid>@civio.build), plus a few TEST progress updates on act-3 of proj-demo-1 (one returned by PM, one approved on positive-path test). act-3 progress on the demo project now advances a bit on each run. Minor: these TEST artefacts accumulate — a maintenance cleanup script would be nice but not required.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Authorization is comprehensively covered by /app/backend/tests/test_authorization.py — 47 tests, all passing against production URL. Keep this file as a regression gate for any future permissioning changes. For a full regression also run tests/test_civio_backend.py. Note the demo project state is mutated by test runs (progress on act-3 advances, extra PU records). If you need a pristine state, drop the mongo collections and restart backend to re-seed.",
+  "rca of the issue": "No new issues; all IDOR / role-escalation vectors enumerated in the review are closed."
+}
