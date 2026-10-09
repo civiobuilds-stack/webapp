@@ -54,7 +54,7 @@ export function AppShell({ children }) {
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar (desktop) */}
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-[hsl(153_43%_13%)] p-4 lg:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-[hsl(222_60%_11%)] p-4 lg:flex">
         <Brand />
         <div className="mt-8 flex-1"><NavLinks /></div>
         <UserCard user={user} initials={initials} logout={logout} />
@@ -64,7 +64,7 @@ export function AppShell({ children }) {
       {mobileNav && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNav(false)} />
-          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[hsl(153_43%_13%)] p-4">
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[hsl(222_60%_11%)] p-4">
             <div className="flex items-center justify-between">
               <Brand />
               <button onClick={() => setMobileNav(false)} className="text-white"><X className="h-5 w-5" /></button>
@@ -78,7 +78,7 @@ export function AppShell({ children }) {
       {/* Top bar (mobile) */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
         <button onClick={() => setMobileNav(true)} data-testid="mobile-menu-btn" className="text-foreground"><Menu className="h-6 w-6" /></button>
-        <div className="flex items-center gap-2"><HardHat className="h-5 w-5 text-primary" /><span className="font-heading font-bold">CIVIO BUILD</span></div>
+        <div className="flex items-center gap-2"><img src="/civio-icon.png" alt="CIVIO" className="h-6 w-6" /><span className="font-heading font-bold tracking-tight">CIVIO</span></div>
         <button onClick={() => navigate("/notifications")} className="relative" data-testid="mobile-bell-btn">
           <Bell className="h-6 w-6" />
           {unread > 0 && <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-rose-500 text-[10px] font-bold text-white">{unread}</span>}
@@ -95,10 +95,10 @@ export function AppShell({ children }) {
 function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2.5" data-testid="brand-logo">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(153_39%_41%)]"><HardHat className="h-5 w-5 text-white" /></div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/95 p-1"><img src="/civio-icon.png" alt="CIVIO" className="h-full w-full object-contain" /></div>
       <div className="leading-tight">
-        <div className="font-heading text-lg font-extrabold tracking-tight text-white">CIVIO BUILD</div>
-        <div className="text-[10px] font-medium uppercase tracking-widest text-white/50">PMC Platform</div>
+        <div className="font-heading text-xl font-extrabold tracking-tight text-white">CIVIO</div>
+        <div className="text-[10px] font-medium uppercase tracking-widest text-white/50">Your Build, Our Expertise</div>
       </div>
     </Link>
   );
@@ -109,7 +109,7 @@ function UserCard({ user, initials, logout }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button data-testid="user-menu-btn" className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-2.5 text-left transition-colors hover:bg-white/10">
-          <Avatar className="h-9 w-9"><AvatarFallback className="bg-[hsl(153_39%_41%)] text-sm text-white">{initials}</AvatarFallback></Avatar>
+          <Avatar className="h-9 w-9"><AvatarFallback className="bg-[hsl(222_100%_56%)] text-sm text-white">{initials}</AvatarFallback></Avatar>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-white">{user?.name}</div>
             <div className="truncate text-[11px] text-white/50">{ROLE_LABEL[user?.role]}</div>

@@ -26,7 +26,7 @@ export default function Register() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm animate-fade-up">
-        <div className="mb-6 flex items-center gap-2"><HardHat className="h-6 w-6 text-primary" /><span className="font-heading text-xl font-extrabold">CIVIO BUILD</span></div>
+        <div className="mb-6"><img src="/civio-logo.png" alt="CIVIO" className="h-9" /></div>
         <h2 className="font-heading text-2xl font-bold">Create your account</h2>
         <p className="mt-1 text-sm text-muted-foreground">For clients and site engineers. PMs are added by an admin.</p>
 

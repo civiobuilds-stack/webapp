@@ -10,9 +10,9 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage,
 )
 
-FOREST = colors.HexColor("#132E23")
-EMERALD = colors.HexColor("#1B4332")
-SAGE = colors.HexColor("#40916C")
+FOREST = colors.HexColor("#0D1B3E")
+EMERALD = colors.HexColor("#16306B")
+SAGE = colors.HexColor("#1E6BFF")
 BONE = colors.HexColor("#F8F9F6")
 CHARCOAL = colors.HexColor("#1F2421")
 MUTED = colors.HexColor("#5C6460")
@@ -59,7 +59,7 @@ def _header_footer(canvas, doc, meta):
     canvas.rect(15 * mm, h - 20 * mm, 9 * mm, 9 * mm, fill=1, stroke=0)
     canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica-Bold", 15)
-    canvas.drawString(27 * mm, h - 17 * mm, "CIVIO BUILD")
+    canvas.drawString(27 * mm, h - 17 * mm, "CIVIO")
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#B7C9BF"))
     canvas.drawString(27 * mm, h - 21 * mm, "Project Management Consultancy")

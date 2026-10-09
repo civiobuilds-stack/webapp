@@ -43,7 +43,7 @@ export default function ProjectDetail() {
       <button onClick={() => navigate("/projects")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="back-to-projects"><ArrowLeft className="h-4 w-4" /> Projects</button>
 
       <Card className="overflow-hidden border-border/60">
-        <div className="bg-[hsl(153_43%_13%)] p-6 text-white">
+        <div className="bg-[hsl(222_60%_11%)] p-6 text-white">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <Badge variant="outline" className="mb-2 border-white/30 font-mono text-white">{project.code}</Badge>
@@ -55,7 +55,7 @@ export default function ProjectDetail() {
               </div>
             </div>
             <div className="text-right">
-              <Badge className="bg-[hsl(153_39%_41%)] text-white">{project.status}</Badge>
+              <Badge className="bg-[hsl(222_100%_56%)] text-white">{project.status}</Badge>
               <div className="mt-3 font-mono text-3xl font-bold">{project.progress_percent ?? 0}%</div>
               <div className="text-xs text-white/50">Overall (weighted)</div>
             </div>
