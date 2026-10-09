@@ -1,0 +1,126 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
+import { ROLE_LABEL } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const NAV = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
+  { to: "/projects", label: "Projects", icon: FolderKanban, testid: "nav-projects" },
+  { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
+];
+
+export function AppShell({ children }) {
+  const { user, logout } = useAuth();
+  const loc = useLocation();
+  const navigate = useNavigate();
+  const [unread, setUnread] = useState(0);
+  const [mobileNav, setMobileNav] = useState(false);
+
+  const loadUnread = () => api.get("/notifications").then((r) => setUnread(r.data.unread)).catch(() => {});
+  useEffect(() => { loadUnread(); }, [loc.pathname]);
+
+  const initials = (user?.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+
+  const NavLinks = ({ onClick }) => (
+    <nav className="flex flex-col gap-1">
+      {NAV.map((n) => {
+        const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
+        return (
+          <Link key={n.to} to={n.to} onClick={onClick} data-testid={n.testid}
+            className={cn("group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+              active ? "bg-primary text-primary-foreground" : "text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground")}>
+            <n.icon className="h-[18px] w-[18px]" />
+            <span>{n.label}</span>
+            {n.to === "/notifications" && unread > 0 && (
+              <Badge className="ml-auto bg-rose-500 text-white" data-testid="nav-unread-count">{unread}</Badge>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Sidebar (desktop) */}
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-[hsl(153_43%_13%)] p-4 lg:flex">
+        <Brand />
+        <div className="mt-8 flex-1"><NavLinks /></div>
+        <UserCard user={user} initials={initials} logout={logout} />
+      </aside>
+
+      {/* Mobile nav drawer */}
+      {mobileNav && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNav(false)} />
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[hsl(153_43%_13%)] p-4">
+            <div className="flex items-center justify-between">
+              <Brand />
+              <button onClick={() => setMobileNav(false)} className="text-white"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mt-8 flex-1"><NavLinks onClick={() => setMobileNav(false)} /></div>
+            <UserCard user={user} initials={initials} logout={logout} />
+          </div>
+        </div>
+      )}
+
+      {/* Top bar (mobile) */}
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
+        <button onClick={() => setMobileNav(true)} data-testid="mobile-menu-btn" className="text-foreground"><Menu className="h-6 w-6" /></button>
+        <div className="flex items-center gap-2"><HardHat className="h-5 w-5 text-primary" /><span className="font-heading font-bold">CIVIO BUILD</span></div>
+        <button onClick={() => navigate("/notifications")} className="relative" data-testid="mobile-bell-btn">
+          <Bell className="h-6 w-6" />
+          {unread > 0 && <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-rose-500 text-[10px] font-bold text-white">{unread}</span>}
+        </button>
+      </header>
+
+      <main className="lg:pl-64">
+        <div className="mx-auto max-w-[1500px] p-4 md:p-8">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+function Brand() {
+  return (
+    <Link to="/" className="flex items-center gap-2.5" data-testid="brand-logo">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(153_39%_41%)]"><HardHat className="h-5 w-5 text-white" /></div>
+      <div className="leading-tight">
+        <div className="font-heading text-lg font-extrabold tracking-tight text-white">CIVIO BUILD</div>
+        <div className="text-[10px] font-medium uppercase tracking-widest text-white/50">PMC Platform</div>
+      </div>
+    </Link>
+  );
+}
+
+function UserCard({ user, initials, logout }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button data-testid="user-menu-btn" className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-2.5 text-left transition-colors hover:bg-white/10">
+          <Avatar className="h-9 w-9"><AvatarFallback className="bg-[hsl(153_39%_41%)] text-sm text-white">{initials}</AvatarFallback></Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-white">{user?.name}</div>
+            <div className="truncate text-[11px] text-white/50">{ROLE_LABEL[user?.role]}</div>
+          </div>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="truncate">{user?.email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={logout} data-testid="logout-btn" className="text-rose-600">
+          <LogOut className="mr-2 h-4 w-4" /> Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

@@ -1,0 +1,151 @@
+{
+  "brand": {
+    "name": "CIVIO BUILD",
+    "tagline": "Professional Construction Project Management Consultancy (PMC) Platform",
+    "target_roles": [
+      {
+        "role": "Admin / Owner / Project Manager",
+        "key_focus": "Central Management Command Center: Projects overview, resource assignments, activities, Gantt/milestones, client approvals queue, defect severity register, procurement tracking in INR, audit log, PDF reports generation."
+      },
+      {
+        "role": "Site Engineer",
+        "key_focus": "Mobile-First Operational Portal: Assigned site projects, quick progress % slider, daily site logs, photo capture/upload with captions & location tags, instant defect logger, material request forms."
+      },
+      {
+        "role": "Client",
+        "key_focus": "Transparent Executive Showcase: Simplified project health meters, site phase progress, high-res approved site photo gallery, single-click Approve/Reject workflow with feedback, downloadable client progress reports."
+      }
+    ]
+  },
+  "visual_archetype": {
+    "name": "Archetype 1 + Tactical Precision (Organic Forest & Construction Architectural)",
+    "mood": "Authoritative, precise, grounded, high-trust engineering precision. Avoids cheap SaaS blues; leans into deep forest greens, crisp structural charcoal, warm bone neutrals, and signal alerts for safety/defects."
+  },
+  "colors": {
+    "primary": {
+      "deep_forest_green": "#132E23",
+      "forest_emerald": "#1B4332",
+      "sage_accent": "#40916C",
+      "mint_glow": "#52B788"
+    },
+    "neutrals": {
+      "charcoal_main": "#1F2421",
+      "dark_slate": "#141716",
+      "bone_bg": "#F8F9F6",
+      "warm_grey_card": "#FFFFFF",
+      "subtle_border": "#E2E5DF",
+      "text_muted": "#5C6460"
+    },
+    "status_and_alerts": {
+      "draft": {
+        "bg": "bg-slate-100 dark:bg-slate-800",
+        "text": "text-slate-700 dark:text-slate-300",
+        "border": "border-slate-300 dark:border-slate-700"
+      },
+      "submitted": {
+        "bg": "bg-sky-50 dark:bg-sky-950/50",
+        "text": "text-sky-800 dark:text-sky-300",
+        "border": "border-sky-300 dark:border-sky-800"
+      },
+      "reviewed": {
+        "bg": "bg-amber-50 dark:bg-amber-950/50",
+        "text": "text-amber-800 dark:text-amber-300",
+        "border": "border-amber-300 dark:border-amber-800"
+      },
+      "pending_client_decision": {
+        "bg": "bg-purple-50 dark:bg-purple-950/50",
+        "text": "text-purple-800 dark:text-purple-300",
+        "border": "border-purple-300 dark:border-purple-800"
+      },
+      "approved": {
+        "bg": "bg-emerald-50 dark:bg-emerald-950/50",
+        "text": "text-emerald-800 dark:text-emerald-300",
+        "border": "border-emerald-300 dark:border-emerald-800"
+      },
+      "rejected": {
+        "bg": "bg-rose-50 dark:bg-rose-950/50",
+        "text": "text-rose-800 dark:text-rose-300",
+        "border": "border-rose-300 dark:border-rose-800"
+      },
+      "clarification_needed": {
+        "bg": "bg-orange-50 dark:bg-orange-950/50",
+        "text": "text-orange-800 dark:text-orange-300",
+        "border": "border-orange-300 dark:border-orange-800"
+      }
+    },
+    "defect_severity": {
+      "critical": "bg-rose-600 text-white font-semibold",
+      "major": "bg-amber-500 text-slate-950 font-semibold",
+      "minor": "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+    }
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Barlow, Outfit, sans-serif",
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100",
+      "h3": "text-xl sm:text-2xl font-medium tracking-snug text-slate-900 dark:text-slate-100",
+      "h4": "text-lg font-medium text-slate-900 dark:text-slate-100"
+    },
+    "body": {
+      "font_family": "Inter, DM Sans, sans-serif",
+      "regular": "text-base leading-relaxed text-slate-700 dark:text-slate-300",
+      "small": "text-sm text-slate-600 dark:text-slate-400",
+      "tiny": "text-xs font-medium uppercase tracking-wider text-slate-500"
+    },
+    "metrics_and_financials": {
+      "font_family": "JetBrains Mono, monospace",
+      "class": "font-mono font-bold text-slate-900 dark:text-slate-100",
+      "currency_format": "INR (₹ Lakh / ₹ Cr / ₹ per sq ft)"
+    }
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-12 gap-6 p-6 md:p-8 max-w-[1600px] mx-auto",
+    "bento_span_ratios": {
+      "summary_hero": "col-span-full md:col-span-8 row-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm",
+      "action_widget": "col-span-full md:col-span-4 row-span-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm",
+      "side_feed": "col-span-full md:col-span-4 row-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm"
+    },
+    "mobile_engineer_container": "max-w-md mx-auto min-h-screen bg-slate-50 dark:bg-slate-950 p-4 space-y-6 pb-24",
+    "client_view_container": "max-w-6xl mx-auto p-4 md:p-8 space-y-8"
+  },
+  "image_urls": {
+    "hero_construction_site": "https://images.unsplash.com/photo-1588543087280-2e13d9e5c391?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwZW5naW5lZXIlMjBoZWxtZXQlMjBzaXRlJTIwaW5zcGVjdGlvbiUyMHByb2plY3QlMjBtYW5hZ2VtZW50JTIwYnVpbGRpbmd8ZW58MHx8fGdyZWVufDE3OTE1MjkwNzV8MA&ixlib=rb-4.1.0&q=85",
+    "site_engineers_blueprint": "https://images.unsplash.com/photo-1774600166834-175d06febcd4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHxfHxjb25zdHJ1Y3Rpb24lMjBlbmdpbmVlciUyMGhhcmRoYXQlMjBoZWxtZXQlMjBzaXRlJTIwaW5zcGVjdGlvbiUyMGFyY2hpdGVjdHVyYWwlMjBibHVlcHJpbnR8ZW58MHx8fHwxNzkxNTI5MDgxfDA&ixlib=rb-4.1.0&q=85",
+    "skyscraper_structure": "https://images.unsplash.com/photo-1602757115429-b4190ae087be?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBza3lzY3JhcGVyJTIwYXJjaGl0ZWN0dXJlJTIwYnVpbGRpbmclMjBjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwY29uY3JldGUlMjBzdHJ1Y3R1cmV8ZW58MHx8fHwxNzkxNTI5MDgxfDA&ixlib=rb-4.1.0&q=85",
+    "concrete_flooring_phase": "https://images.unsplash.com/photo-1759771611523-0cc0366b8333?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBza3lzY3JhcGVyJTIwYXJjaGl0ZWN0dXJlJTIwYnVpbGRpbmclMjBjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwY29uY3JldGUlMjBzdHJ1Y3R1cmV8ZW58MHx8fHwxNzkxNTI5MDgxfDA&ixlib=rb-4.1.0&q=85",
+    "building_interior_inspection": "https://images.unsplash.com/photo-1704920110270-5c107519cdc4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBza3lzY3JhcGVyJTIwYXJjaGl0ZWN0dXJlJTIwYnVpbGRpbmclMjBjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwY29uY3JldGUlMjBzdHJ1Y3R1cmV8ZW58MHx8fHwxNzkxNTI5MDgxfDA&ixlib=rb-4.1.0&q=85"
+  },
+  "interactive_components_strategy": {
+    "role_switcher": "Sticky top bar or header profile toggle letting users seamlessly switch between Admin/PM, Site Engineer, and Client views with realistic mock state pre-populated.",
+    "progress_approval_modal": "Shadcn Dialog with timeline history of approval decisions (Draft -> Submitted -> Reviewed -> Pending Client Decision -> Approved/Rejected). Includes feedback comment box.",
+    "defect_register": "Filterable data table with severity badges (Critical red, Major amber, Minor gray), status toggles, photo thumbnail popovers, assigned engineer avatar, and resolution deadline.",
+    "procurement_ledger": "INR formatted summary cards (Total Budget, Spent to Date, Outstanding POs) + detailed breakdown table with status pills (Paid, Pending, Overdue).",
+    "site_photo_gallery": "Filterable by project phase (Foundation, Superstructure, MEP, Finishing) with lightbox view, site engineer timestamp, and client approval badge.",
+    "pdf_exporter": "Generate clean printable PDF summary report trigger with dynamic formatting for client sign-off."
+  },
+  "test_id_rules": {
+    "mandatory_pattern": "Every interactive button, tab, role selector, input field, modal trigger, status badge, and filter dropdown MUST include explicit data-testid attribute in kebab-case.",
+    "examples": [
+      "data-testid=\"role-switcher-select\"",
+      "data-testid=\"project-card-item\"",
+      "data-testid=\"submit-progress-btn\"",
+      "data-testid=\"client-approve-btn\"",
+      "data-testid=\"client-reject-btn\"",
+      "data-testid=\"defect-severity-badge\"",
+      "data-testid=\"procurement-amount-input\"",
+      "data-testid=\"export-pdf-report-btn\"",
+      "data-testid=\"notification-bell-btn\""
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. Replace standard Vercel dark/blue defaults with Deep Forest Green (#132E23 / #1B4332) and charcoal structural card backgrounds.",
+    "2. Implement role-based navigation with realistic sample data for 3 distinct PMC user personas (Admin/PM, Site Engineer, Client).",
+    "3. Support the full progress-update lifecycle states: Draft, Submitted, Reviewed, Pending Client Decision, Approved, Rejected, Clarification Needed.",
+    "4. All monetary figures must be strictly formatted in INR (₹) with Indian numerical units (Lakh, Cr).",
+    "5. Use Shadcn components for dialogs, tabs, dropdowns, tables, sonner toasts, and progress meters, but apply custom forest-green and charcoal styling.",
+    "6. Ensure site engineer interface has a clear mobile view layout with large touch targets for site photo upload and daily report submissions.",
+    "7. Include interactive PDF export simulation or printable view for client status reports.",
+    "8. Include data-testid attributes on all interactive elements without exception."
+  ]
+}
