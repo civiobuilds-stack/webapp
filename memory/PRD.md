@@ -46,7 +46,12 @@ audit logs. Premium forest-green "CIVIO BUILD" design, mobile-first for engineer
 - Hardened: file upload requires write access (blocks clients); orphan files restricted to uploader/managers; progress-revise re-checks project membership.
 - Verified by testing agent: 47/47 authorization/IDOR tests pass. Regression suite `tests/test_authorization.py`.
 
-## Implemented (2026-06, Stage 3 — Reports, Procurement, Scoping, Audit Export) ✅
+## Implemented (2026-06, Stage 4 — Branding + Phone/OTP + Email) ✅
+- **Rebrand to CIVIO**: navy/blue/green logo palette across app (theme tokens, sidebar, project header, PDF reports), CIVIO wordmark + ring app-icon, favicon, tagline "Your Build, Our Expertise".
+- **People management**: Owner/PM screen to create engineers & clients (and PMs by admin) with auto temp password + copyable credentials.
+- **Phone + Email OTP verification** (Emergent-managed Resend): signup requires a phone number; a 6-digit code is emailed and must be verified before first login. Applies to self-signup AND admin/PM-created accounts. Login gates unverified users (403 `email_not_verified`) and reissues a code; resend endpoint is enumeration-safe; attempts rate-limited (429 after 6). Seeded/demo accounts are pre-verified.
+- **Report emailing**: generating a report emails the PDF (attached) to the project client + assigned engineers; failures are swallowed (report still saved).
+- Verified by testing agent: OTP flow 18/18, authorization & prior suites green. Emailer never raises on provider errors.
 - **PDF Reports** (`reports.py`, reportlab): Civio-branded Progress / Completion / Cost reports from live data — project header, activity/milestone/defect tables, dated site photos, cost summary, completion sign-off block, page footer (timestamp, revision id, page numbers). Stored in Object Storage; historical revisions preserved; list + download (`?auth=` token); client can download published reports; generation notifies client.
 - **Procurement & Cost**: material requests (engineer raise → PM authorize/reject), suppliers, purchase orders with line items (amount = qty×rate, PO numbers), PO + invoice status tracking, INR cost summary (budget / committed / actual / forecast / variance). Client sees procurement only if `client_budget_visible`.
 - **Shared-Photo Scoping**: clients only see photos on approved or pending-decision updates and closed-defect photos (`client_visible_file_ids`), enforced on both the gallery and file download.

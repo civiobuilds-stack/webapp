@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration-4 tested the new OTP + phone + email verification feature end-to-end. Added /app/backend/tests/test_otp_email_flow.py (19 pytest tests). 18 passed, 1 skipped (delivered@resend.dev positive-delivery check — Resend sandbox was rate-limited at run time and reply came back empty). All regressions pass: seeded admin/pm/engineer/client still log in with their documented passwords and remain email_verified=true. Phone is enforced on self-register and on admin-created engineer/client accounts; PM creation does not require phone. OTP wrong-code / correct-code / 429 rate-limit / resend all behave per spec. Login returns 403 with detail.code='email_not_verified' for unverified accounts and reissues a fresh OTP. Report generation returns {id, emailed_to:[]} even when the mail provider blocks example.com/civio.build recipients (safe, logged, no 500). Frontend register-phone-input, OTP screen (otp-digit-0..5, otp-verify-btn, otp-resend-btn), and login→OTP transition for unverified user all work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/register & /api/users", "issue": "Server lowercases the email before insert — fine, but response/body use the lowercased string. Documented, not a bug."},
+      {"endpoint": "/api/projects/{id}/reports (email)", "issue": "Resend sandbox returns 429 'email rate limit exceeded' under test load (observed in backend.err.log). Code handles it gracefully (returns None, report still 200). Could cause the delivered@resend.dev positive assertion to be unverifiable in rapid test runs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_otp_email_flow.py",
+    "/app/test_reports/pytest/otp_email_flow.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py now ~1370 lines — still well past the 700-line guideline. Splitting auth/otp, projects, procurement, reports into routers would help maintenance.",
+    "RegisterIn uses phone: str = Field(min_length=6) so empty/missing phone yields 422; UserCreateIn phone is Optional and validated in-handler to 400. Behaviour is consistent across self-register vs admin-create but implementations diverge; consider unifying.",
+    "resend_otp intentionally returns 200 for unknown or already-verified emails to prevent enumeration (correct). Verified in test_resend_otp_for_unknown_email_is_200 / verified_user_is_200.",
+    "verify-otp attempts counter is incremented on wrong code and reset only on a new issue_otp (set to 0). Once attempts hit 6 the handler returns 429. Verified — but note that after 429, resend-otp resets attempts and lets the user try again (intended).",
+    "generate_report sends OTP-less report emails using emailer.send_email which swallows all failures. verified test_report_generation_tolerates_undeliverable_recipients: report returns 200 even though every single recipient was rejected by the sandbox.",
+    "Startup migration `email_verified: {$exists: false} -> true` is idempotent; seeded users already have email_verified: true explicitly set in seed.py (verified by regression tests).",
+    "Phone number is NOT validated for format (just length ≥ 6). Acceptable for MVP."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_otp_email_flow.py (new, 19 tests, 18 pass / 1 skip)"
+  ],
+  "success_rate": {"backend": "100% (18/18 asserting tests pass; 1 provider-dependent test skipped on rate-limit)", "frontend": "100% (register → otp screen, wrong-code error, unverified login → otp, verified login → dashboard all verified)"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md. All 4 documented seeded accounts verified. Test-created accounts were cleaned from mongo after the run (15 TEST_ users removed).",
+  "seed_data_creation": "Each run temporarily creates ~8-10 TEST_ users (self-registrations, admin-created client/pm, delivered@resend.dev). All test_* users are deleted at end of session; delivered@resend.dev is left in place because it is useful for provider-delivery testing. proj-demo-1 was briefly re-assigned to delivered@resend.dev as client during the positive-delivery test; original client restored in a try/finally.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To positively confirm Resend delivery to delivered@resend.dev, run only test_generate_report_delivered_resend_dev_appears_in_emailed_to in isolation (not after a storm of other report tests) because the Resend sandbox hits 429 rate-limited very quickly. Code at /app/backend/emailer.py:send_email swallows 422/429/5xx and returns None. OTP codes are stored in db.users.otp_code and must be read from mongo (never returned in API responses). All 5 regression files are now: test_civio_backend.py, test_authorization.py, test_civio_new_features.py, test_otp_email_flow.py (and existing __init__.py).",
+  "rca of the issue": "No open issues. The one skipped test is environmental (Resend sandbox rate-limit) not a code bug; backend logs confirm a 202 Accepted response once in the window, proving the email path reaches Resend correctly for delivered@resend.dev."
+}
