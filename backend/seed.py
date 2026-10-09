@@ -83,6 +83,43 @@ async def seed_all(db, hash_password, now_iso):
         await db.milestones.insert_one({"id": mid, "project_id": project["id"], "name": name,
                                         "due_date": due, "status": status, "created_at": now_iso()})
 
+    # --- Procurement demo data ---
+    await db.suppliers.insert_one({"id": "sup-1", "company_id": "civio", "name": "UltraTech Cement Ltd",
+                                   "contact": "+91 90000 10001", "categories": "Cement, RMC, Aggregates", "created_at": now_iso()})
+    await db.suppliers.insert_one({"id": "sup-2", "company_id": "civio", "name": "Tata Steel Distributors",
+                                   "contact": "+91 90000 20002", "categories": "TMT Bars, Structural Steel", "created_at": now_iso()})
+
+    await db.material_requests.insert_one({
+        "id": "mr-1", "project_id": project["id"], "item": "Fe500D TMT Bars (16mm)", "quantity": 8,
+        "unit": "tonnes", "needed_by": iso(10), "notes": "For 3rd floor slab reinforcement.",
+        "requested_by": "user-eng", "status": "authorized", "decided_by": "user-pm",
+        "decision_comment": "Approved — within schedule.", "created_at": now_iso(),
+        "history": [{"status": "requested", "by": "Anita Deshmukh (Engineer)", "at": iso(-3), "note": "For slab"},
+                    {"status": "authorized", "by": "Rajesh Nair (PM)", "at": iso(-2), "note": "Approved"}],
+    })
+    await db.material_requests.insert_one({
+        "id": "mr-2", "project_id": project["id"], "item": "Waterproofing compound (crystalline)", "quantity": 40,
+        "unit": "bags", "needed_by": iso(5), "notes": "Basement retaining wall remediation.",
+        "requested_by": "user-eng2", "status": "requested", "decided_by": None, "decision_comment": None,
+        "created_at": now_iso(),
+        "history": [{"status": "requested", "by": "Vikram Singh (Engineer)", "at": iso(-1), "note": "For DEF-001"}],
+    })
+
+    await db.purchase_orders.insert_one({
+        "id": "po-1", "project_id": project["id"], "po_number": "PO-001", "supplier_id": "sup-1",
+        "material_request_id": None, "items": [{"description": "OPC 53 Grade Cement", "quantity": 1200, "unit": "bags", "rate": 410, "amount": 492000}],
+        "total_amount": 492000, "notes": "Foundation & superstructure.", "status": "accepted",
+        "delivered_qty": 1200, "accepted_qty": 1200, "invoice_status": "paid", "created_by": "user-pm", "created_at": now_iso(),
+        "history": [{"status": "accepted", "by": "Rajesh Nair (PM)", "at": iso(-20), "note": "Delivered & accepted"}],
+    })
+    await db.purchase_orders.insert_one({
+        "id": "po-2", "project_id": project["id"], "po_number": "PO-002", "supplier_id": "sup-2",
+        "material_request_id": "mr-1", "items": [{"description": "Fe500D TMT Bars (16mm)", "quantity": 8, "unit": "tonnes", "rate": 68000, "amount": 544000}],
+        "total_amount": 544000, "notes": "3rd floor slab.", "status": "ordered",
+        "delivered_qty": 0, "accepted_qty": 0, "invoice_status": "pending", "created_by": "user-pm", "created_at": now_iso(),
+        "history": [{"status": "ordered", "by": "Rajesh Nair (PM)", "at": iso(-2), "note": "PO placed"}],
+    })
+
     # A pending-client-decision progress update
     await db.progress_updates.insert_one({
         "id": "pu-1", "project_id": project["id"], "activity_id": "act-2",

@@ -18,6 +18,9 @@ from pydantic import BaseModel, Field, EmailStr
 from auth import hash_password, verify_password, create_access_token, decode_token
 import storage
 import seed as seed_module
+import reports as reports_module
+import csv
+import io
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -238,6 +241,54 @@ class DefectStatusIn(BaseModel):
     status: str
     note: str = ""
     closure_photo_ids: List[str] = []
+
+
+class MaterialRequestIn(BaseModel):
+    item: str
+    quantity: float
+    unit: str = "nos"
+    needed_by: Optional[str] = None
+    notes: str = ""
+
+
+class MaterialDecisionIn(BaseModel):
+    action: str  # authorize | reject
+    comment: str = ""
+
+
+class SupplierIn(BaseModel):
+    name: str
+    contact: str = ""
+    categories: str = ""
+
+
+class POItemIn(BaseModel):
+    description: str
+    quantity: float
+    unit: str = "nos"
+    rate: float = 0
+
+
+class PurchaseOrderIn(BaseModel):
+    supplier_id: str
+    material_request_id: Optional[str] = None
+    items: List[POItemIn]
+    notes: str = ""
+
+
+class POStatusIn(BaseModel):
+    status: Optional[str] = None  # draft | approved | ordered | delivered | accepted
+    delivered_qty: Optional[float] = None
+    accepted_qty: Optional[float] = None
+    invoice_status: Optional[str] = None  # pending | paid | overdue
+    note: str = ""
+
+
+class ReportIn(BaseModel):
+    type: str  # progress | completion | cost
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
+    recommendations: str = ""
 
 
 def public_user(u: dict) -> dict:
@@ -753,6 +804,25 @@ async def upload_file(file: UploadFile = File(...), project_id: str = Form(None)
     return doc
 
 
+async def client_visible_file_ids(project_id: str) -> set:
+    """Photos a client may see: those attached to updates pending their decision or approved,
+    plus closure/before photos on closed defects. Draft/internal media stays hidden."""
+    ids = set()
+    pus = await db.progress_updates.find(
+        {"project_id": project_id, "status": {"$in": ["pending_client_decision", "approved"]}},
+        {"_id": 0, "photo_ids": 1},
+    ).to_list(1000)
+    for pu in pus:
+        ids.update(pu.get("photo_ids", []))
+    defs = await db.defects.find(
+        {"project_id": project_id, "status": "closed"}, {"_id": 0, "before_photo_ids": 1, "closure_photo_ids": 1},
+    ).to_list(1000)
+    for d in defs:
+        ids.update(d.get("before_photo_ids", []))
+        ids.update(d.get("closure_photo_ids", []))
+    return ids
+
+
 @api_router.get("/projects/{project_id}/photos")
 async def project_photos(project_id: str, user: dict = Depends(get_current_user)):
     await get_project_or_403(project_id, user)
@@ -760,6 +830,9 @@ async def project_photos(project_id: str, user: dict = Depends(get_current_user)
         {"project_id": project_id, "is_deleted": False, "content_type": {"$regex": "^image/"}},
         {"_id": 0},
     ).sort("created_at", -1).to_list(500)
+    if user["role"] == "client":
+        visible = await client_visible_file_ids(project_id)
+        files = [f for f in files if f["id"] in visible]
     return files
 
 
@@ -783,6 +856,10 @@ async def download_file(file_id: str, request: Request, auth: str = Query(None))
         raise HTTPException(status_code=404, detail="File not found")
     if record.get("project_id"):
         await get_project_or_403(record["project_id"], user)
+        if user["role"] == "client":
+            visible = await client_visible_file_ids(record["project_id"])
+            if file_id not in visible:
+                raise HTTPException(status_code=403, detail="This photo has not been shared with you.")
     elif record.get("uploaded_by") != user["id"] and user["role"] not in MANAGER_ROLES:
         raise HTTPException(status_code=403, detail="You cannot access this file.")
     data, ctype = storage.get_object(record["storage_path"])
@@ -843,6 +920,331 @@ async def dashboard_summary(user: dict = Depends(get_current_user)):
         "unread_notifications": notif,
         "avg_progress": round(sum(p.get("progress_percent", 0) for p in projects) / len(projects), 1) if projects else 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Procurement & cost
+# ---------------------------------------------------------------------------
+async def enrich_mr(m: dict) -> dict:
+    uids = list(filter(None, [m.get("requested_by"), m.get("decided_by")]))
+    users = await db.users.find({"id": {"$in": uids}}, {"_id": 0, "password_hash": 0}).to_list(50)
+    umap = {u["id"]: public_user(u) for u in users}
+    m["requester"] = umap.get(m.get("requested_by"))
+    return m
+
+
+@api_router.get("/projects/{project_id}/material-requests")
+async def list_material_requests(project_id: str, user: dict = Depends(get_current_user)):
+    project = await get_project_or_403(project_id, user)
+    if user["role"] == "client" and not project.get("client_budget_visible"):
+        raise HTTPException(status_code=403, detail="Procurement is not shared for this project.")
+    items = await db.material_requests.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    for m in items:
+        await enrich_mr(m)
+    return items
+
+
+@api_router.post("/projects/{project_id}/material-requests")
+async def create_material_request(project_id: str, body: MaterialRequestIn, user: dict = Depends(require_roles("admin", "project_manager", "site_engineer"))):
+    await get_project_or_403(project_id, user, write=True)
+    mid = new_id()
+    ts = now_iso()
+    doc = body.model_dump()
+    doc.update({
+        "id": mid, "project_id": project_id, "requested_by": user["id"], "status": "requested",
+        "decided_by": None, "decision_comment": None, "created_at": ts,
+        "history": [{"status": "requested", "by": user["name"], "at": ts, "note": body.notes}],
+    })
+    await db.material_requests.insert_one(doc)
+    await log_audit(project_id, user, "raised material request", "material_request", mid, f"{body.quantity} {body.unit} {body.item}")
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if project and project.get("project_manager_id") and project["project_manager_id"] != user["id"]:
+        await notify(project["project_manager_id"], "material", f"Material request raised: {body.item}.", project_id)
+    doc.pop("_id", None)
+    return await enrich_mr(doc)
+
+
+@api_router.post("/material-requests/{mr_id}/decision")
+async def decide_material_request(mr_id: str, body: MaterialDecisionIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    mr = await db.material_requests.find_one({"id": mr_id}, {"_id": 0})
+    if not mr:
+        raise HTTPException(status_code=404, detail="Request not found")
+    await get_project_or_403(mr["project_id"], user, write=True)
+    if mr["status"] != "requested":
+        raise HTTPException(status_code=400, detail="This request has already been decided.")
+    if body.action not in {"authorize", "reject"}:
+        raise HTTPException(status_code=400, detail="Invalid action.")
+    new_status = "authorized" if body.action == "authorize" else "rejected"
+    ts = now_iso()
+    await db.material_requests.update_one({"id": mr_id}, {
+        "$set": {"status": new_status, "decided_by": user["id"], "decision_comment": body.comment},
+        "$push": {"history": {"status": new_status, "by": user["name"], "at": ts, "note": body.comment}},
+    })
+    await log_audit(mr["project_id"], user, f"material request {new_status}", "material_request", mr_id, body.comment)
+    await notify(mr["requested_by"], "material", f"Your material request for {mr['item']} was {new_status}.", mr["project_id"])
+    mr = await db.material_requests.find_one({"id": mr_id}, {"_id": 0})
+    return await enrich_mr(mr)
+
+
+@api_router.get("/suppliers")
+async def list_suppliers(user: dict = Depends(require_roles("admin", "project_manager"))):
+    return await db.suppliers.find({"company_id": "civio"}, {"_id": 0}).sort("name", 1).to_list(1000)
+
+
+@api_router.post("/suppliers")
+async def create_supplier(body: SupplierIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "company_id": "civio", "created_at": now_iso()})
+    await db.suppliers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+async def enrich_po(po: dict) -> dict:
+    supplier = await db.suppliers.find_one({"id": po.get("supplier_id")}, {"_id": 0})
+    po["supplier"] = supplier
+    return po
+
+
+@api_router.get("/projects/{project_id}/purchase-orders")
+async def list_purchase_orders(project_id: str, user: dict = Depends(get_current_user)):
+    project = await get_project_or_403(project_id, user)
+    if user["role"] == "client" and not project.get("client_budget_visible"):
+        raise HTTPException(status_code=403, detail="Procurement is not shared for this project.")
+    pos = await db.purchase_orders.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    for po in pos:
+        await enrich_po(po)
+    return pos
+
+
+@api_router.post("/projects/{project_id}/purchase-orders")
+async def create_purchase_order(project_id: str, body: PurchaseOrderIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    await get_project_or_403(project_id, user, write=True)
+    supplier = await db.suppliers.find_one({"id": body.supplier_id}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    items = [i.model_dump() for i in body.items]
+    for i in items:
+        i["amount"] = round((i.get("quantity", 0) or 0) * (i.get("rate", 0) or 0), 2)
+    total = round(sum(i["amount"] for i in items), 2)
+    count = await db.purchase_orders.count_documents({"project_id": project_id})
+    pid = new_id()
+    ts = now_iso()
+    doc = {
+        "id": pid, "project_id": project_id, "po_number": f"PO-{count + 1:03d}",
+        "supplier_id": body.supplier_id, "material_request_id": body.material_request_id,
+        "items": items, "total_amount": total, "notes": body.notes,
+        "status": "draft", "delivered_qty": 0, "accepted_qty": 0, "invoice_status": "pending",
+        "created_by": user["id"], "created_at": ts,
+        "history": [{"status": "draft", "by": user["name"], "at": ts, "note": "PO created"}],
+    }
+    await db.purchase_orders.insert_one(doc)
+    await log_audit(project_id, user, "created purchase order", "purchase_order", pid, f"{doc['po_number']} {_inr_plain(total)}")
+    if body.material_request_id:
+        await db.material_requests.update_one({"id": body.material_request_id}, {"$set": {"status": "ordered"}})
+    doc.pop("_id", None)
+    return await enrich_po(doc)
+
+
+@api_router.post("/purchase-orders/{po_id}/status")
+async def update_po_status(po_id: str, body: POStatusIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    if not po:
+        raise HTTPException(status_code=404, detail="PO not found")
+    await get_project_or_403(po["project_id"], user, write=True)
+    update = {}
+    PO_FLOW = {"draft", "approved", "ordered", "delivered", "accepted", "cancelled"}
+    if body.status is not None:
+        if body.status not in PO_FLOW:
+            raise HTTPException(status_code=400, detail="Invalid PO status.")
+        update["status"] = body.status
+    if body.delivered_qty is not None:
+        update["delivered_qty"] = body.delivered_qty
+    if body.accepted_qty is not None:
+        update["accepted_qty"] = body.accepted_qty
+    if body.invoice_status is not None:
+        if body.invoice_status not in {"pending", "paid", "overdue"}:
+            raise HTTPException(status_code=400, detail="Invalid invoice status.")
+        update["invoice_status"] = body.invoice_status
+    ts = now_iso()
+    await db.purchase_orders.update_one({"id": po_id}, {
+        "$set": update,
+        "$push": {"history": {"status": body.status or po["status"], "by": user["name"], "at": ts, "note": body.note}},
+    })
+    await log_audit(po["project_id"], user, "updated purchase order", "purchase_order", po_id, str(update))
+    po = await db.purchase_orders.find_one({"id": po_id}, {"_id": 0})
+    return await enrich_po(po)
+
+
+def _inr_plain(v):
+    try:
+        return f"Rs {float(v):,.0f}"
+    except Exception:
+        return "Rs 0"
+
+
+@api_router.get("/projects/{project_id}/cost-summary")
+async def cost_summary(project_id: str, user: dict = Depends(get_current_user)):
+    project = await get_project_or_403(project_id, user)
+    if user["role"] == "client" and not project.get("client_budget_visible"):
+        raise HTTPException(status_code=403, detail="Budget is not shared for this project.")
+    pos = await db.purchase_orders.find({"project_id": project_id, "status": {"$ne": "cancelled"}}, {"_id": 0}).to_list(1000)
+    committed = round(sum(po.get("total_amount", 0) for po in pos if po.get("status") in {"approved", "ordered", "delivered", "accepted"}), 2)
+    actual = round(sum(po.get("total_amount", 0) for po in pos if po.get("invoice_status") == "paid"), 2)
+    budget = project.get("contract_value") or 0
+    forecast = max(committed, actual)
+    return {
+        "budget": budget, "committed": committed, "actual": actual, "forecast": forecast,
+        "variance": round(budget - forecast, 2), "po_count": len(pos),
+        "outstanding_invoices": round(sum(po.get("total_amount", 0) for po in pos if po.get("invoice_status") in {"pending", "overdue"}), 2),
+    }
+
+
+# ---------------------------------------------------------------------------
+# PDF reports
+# ---------------------------------------------------------------------------
+async def _build_report_ctx(project, rtype, body, user):
+    acts = await db.activities.find({"project_id": project["id"]}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    mstones = await db.milestones.find({"project_id": project["id"]}, {"_id": 0}).sort("due_date", 1).to_list(1000)
+    defects = await db.defects.find({"project_id": project["id"], "status": {"$ne": "closed"}}, {"_id": 0}).sort("severity", 1).to_list(1000)
+
+    pu_query = {"project_id": project["id"], "status": {"$in": ["submitted", "reviewed", "pending_client_decision", "approved"]}}
+    if body.period_start:
+        pu_query["created_at"] = {"$gte": body.period_start}
+    if body.period_end:
+        pu_query.setdefault("created_at", {})["$lte"] = body.period_end + "T23:59:59"
+    pus = await db.progress_updates.find(pu_query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    act_map = {a["id"]: a for a in acts}
+    eng_ids = list({u["engineer_id"] for u in pus})
+    engs = await db.users.find({"id": {"$in": eng_ids}}, {"_id": 0, "name": 1, "id": 1}).to_list(100)
+    eng_map = {e["id"]: e["name"] for e in engs}
+    progress = [{"activity_name": act_map.get(u["activity_id"], {}).get("name", "—"),
+                 "percent_complete": u.get("percent_complete", 0), "status": u.get("status", ""),
+                 "engineer_name": eng_map.get(u.get("engineer_id"), "—"), "created_at": u.get("created_at")} for u in pus]
+
+    # Photos within period from the progress updates
+    photo_ids = []
+    for u in pus:
+        photo_ids.extend(u.get("photo_ids", []))
+    photo_ids = photo_ids[:9]
+    photo_docs = await db.files.find({"id": {"$in": photo_ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    photos = []
+    for pd in photo_docs:
+        try:
+            raw, _ = storage.get_object(pd["storage_path"])
+            photos.append((raw, pd.get("caption") or pd.get("original_filename"), pd.get("created_at")))
+        except Exception as e:
+            logger.error(f"report photo fetch failed: {e}")
+
+    cost = None
+    if rtype in ("cost", "completion"):
+        pos = await db.purchase_orders.find({"project_id": project["id"], "status": {"$ne": "cancelled"}}, {"_id": 0}).to_list(1000)
+        committed = sum(po.get("total_amount", 0) for po in pos if po.get("status") in {"approved", "ordered", "delivered", "accepted"})
+        actual = sum(po.get("total_amount", 0) for po in pos if po.get("invoice_status") == "paid")
+        budget = project.get("contract_value") or 0
+        forecast = max(committed, actual)
+        cost = {"budget": budget, "committed": committed, "actual": actual, "forecast": forecast, "variance": budget - forecast}
+
+    return {"project": project, "activities": acts, "milestones": mstones, "defects": defects,
+            "progress": progress, "photos": photos, "cost": cost}
+
+
+@api_router.get("/projects/{project_id}/reports")
+async def list_reports(project_id: str, user: dict = Depends(get_current_user)):
+    await get_project_or_403(project_id, user)
+    return await db.reports.find({"project_id": project_id}, {"_id": 0}).sort("generated_at", -1).to_list(500)
+
+
+@api_router.post("/projects/{project_id}/reports")
+async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    project = await get_project_or_403(project_id, user, write=True)
+    if body.type not in {"progress", "completion", "cost"}:
+        raise HTTPException(status_code=400, detail="Unknown report type.")
+    titles = {"progress": "Construction Progress Report", "completion": "Project Completion Report", "cost": "Project Cost Summary"}
+    rev_count = await db.reports.count_documents({"project_id": project_id, "type": body.type})
+    revision = f"{body.type[:3].upper()}-{rev_count + 1:02d}"
+    meta = {
+        "title": titles[body.type], "code": project.get("code", ""),
+        "period_start": body.period_start, "period_end": body.period_end,
+        "generated": datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"),
+        "revision": revision, "recommendations": body.recommendations,
+        "confidential": "Confidential — Civio PMC",
+    }
+    ctx = await _build_report_ctx(project, body.type, body, user)
+    ctx["meta"] = meta
+    pdf_bytes = reports_module.build_report(body.type, ctx)
+    rid = new_id()
+    path = f"{storage.APP_NAME}/reports/{project_id}/{rid}.pdf"
+    try:
+        result = storage.put_object(path, pdf_bytes, "application/pdf")
+    except Exception as e:
+        logger.error(f"report upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Could not store the generated report.")
+    doc = {
+        "id": rid, "project_id": project_id, "type": body.type, "title": titles[body.type],
+        "revision": revision, "period_start": body.period_start, "period_end": body.period_end,
+        "storage_path": result["path"], "size": result.get("size", len(pdf_bytes)),
+        "generated_by": user["id"], "generated_by_name": user["name"], "generated_at": now_iso(),
+    }
+    await db.reports.insert_one(doc)
+    await log_audit(project_id, user, "generated report", "report", rid, f"{titles[body.type]} ({revision})")
+    if project.get("client_id"):
+        await notify(project["client_id"], "report", f"A new report was published: {titles[body.type]}.", project_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/reports/{report_id}/download")
+async def download_report(report_id: str, request: Request, auth: str = Query(None)):
+    if auth and "Authorization" not in request.headers:
+        try:
+            payload = decode_token(auth)
+            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        user = await get_current_user(request)
+    rec = await db.reports.find_one({"id": report_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Report not found")
+    await get_project_or_403(rec["project_id"], user)
+    data, _ = storage.get_object(rec["storage_path"])
+    fname = f"{rec['title'].replace(' ', '_')}_{rec['revision']}.pdf"
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+# ---------------------------------------------------------------------------
+# Audit export (CSV)
+# ---------------------------------------------------------------------------
+@api_router.get("/projects/{project_id}/audit-log/export")
+async def export_audit_csv(project_id: str, request: Request, auth: str = Query(None)):
+    if auth and "Authorization" not in request.headers:
+        try:
+            payload = decode_token(auth)
+            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        user = await get_current_user(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only an admin can export the audit log.")
+    project = await get_project_or_403(project_id, user)
+    logs = await db.audit_logs.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["Timestamp (UTC)", "Actor", "Action", "Entity Type", "Entity ID", "Details"])
+    for l in logs:
+        writer.writerow([l.get("created_at", ""), l.get("actor_name", ""), l.get("action", ""),
+                         l.get("entity_type", ""), l.get("entity_id", ""), l.get("details", "")])
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    fname = f"civio_audit_{project.get('code', 'project')}_{stamp}.csv"
+    return Response(content=out.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 app.include_router(api_router)

@@ -1,20 +1,32 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API, getToken } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollText } from "lucide-react";
+import { ScrollText, Download } from "lucide-react";
 
 export function AuditTab({ project }) {
+  const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => { api.get(`/projects/${project.id}/audit-log`).then((r) => setLogs(r.data)).catch(() => {}).finally(() => setLoading(false)); }, [project.id]);
+
+  const exportUrl = `${API}/projects/${project.id}/audit-log/export?auth=${getToken()}`;
 
   if (loading) return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>;
 
   return (
     <div className="space-y-4">
-      <h3 className="font-heading text-lg font-semibold">Audit log</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-heading text-lg font-semibold">Audit log</h3>
+        {user.role === "admin" && (
+          <a href={exportUrl} data-testid="export-audit-csv-btn">
+            <Button variant="outline" size="sm"><Download className="h-4 w-4" /> Export CSV</Button>
+          </a>
+        )}
+      </div>
       {logs.length === 0 ? <Card className="p-10 text-center text-muted-foreground">No activity recorded.</Card> : (
         <Card className="divide-y p-0">
           {logs.map((l) => (

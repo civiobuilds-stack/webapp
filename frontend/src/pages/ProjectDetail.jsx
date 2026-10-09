@@ -15,6 +15,8 @@ import { DefectsTab } from "@/pages/project/DefectsTab";
 import { PhotosTab } from "@/pages/project/PhotosTab";
 import { TeamTab } from "@/pages/project/TeamTab";
 import { AuditTab } from "@/pages/project/AuditTab";
+import { ProcurementTab } from "@/pages/project/ProcurementTab";
+import { ReportsTab } from "@/pages/project/ReportsTab";
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -68,6 +70,8 @@ export default function ProjectDetail() {
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
           <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
           <TabsTrigger value="defects" data-testid="tab-defects">Defects</TabsTrigger>
+          <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
           {manager && <TabsTrigger value="audit" data-testid="tab-audit">Audit Log</TabsTrigger>}
@@ -79,6 +83,8 @@ export default function ProjectDetail() {
         <TabsContent value="activities" className="mt-5"><ActivitiesTab project={project} role={user.role} reload={load} /></TabsContent>
         <TabsContent value="progress" className="mt-5"><ProgressTab project={project} role={user.role} userId={user.id} /></TabsContent>
         <TabsContent value="defects" className="mt-5"><DefectsTab project={project} role={user.role} /></TabsContent>
+        <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>
+        <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
         <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} /></TabsContent>
         {manager && <TabsContent value="audit" className="mt-5"><AuditTab project={project} /></TabsContent>}
