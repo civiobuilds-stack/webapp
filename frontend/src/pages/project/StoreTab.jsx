@@ -15,15 +15,18 @@ import { toast } from "sonner";
 const can = (p, a) => (p?.store || []).includes(a);
 const run = async (fn, ok, done) => { try { await fn(); toast.success(ok); done(); } catch (e) { toast.error(apiError(e.response?.data?.detail)); } };
 
-function FormDialog({ title, fields, photo, projectId, onSubmit, onClose, testid }) {
+function FormDialog({ title, fields, photo, projectId, onSubmit, onClose, testid, hint }) {
   const [f, setF] = useState(Object.fromEntries(fields.map(([k, , , d]) => [k, d ?? ""])));
   const [photos, setPhotos] = useState([]);
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid={testid}><DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          {fields.map(([k, l, type]) => <div key={k} className="space-y-1.5"><Label>{l}</Label>
-            <Input type={type || "text"} value={f[k]} onChange={(e) => setF({ ...f, [k]: type === "number" ? Number(e.target.value) : e.target.value })} data-testid={`${testid}-${k}`} /></div>)}
+          {hint && <p className="rounded-md bg-muted p-2 text-xs" data-testid={`${testid}-hint`}>{hint(f)}</p>}
+          {fields.map(([k, l, type, , opts]) => <div key={k} className="space-y-1.5"><Label>{l}</Label>
+            {type === "select" ? <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`${testid}-${k}`}>
+              {opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>
+            : <Input type={type || "text"} value={f[k]} onChange={(e) => setF({ ...f, [k]: type === "number" ? Number(e.target.value) : e.target.value })} data-testid={`${testid}-${k}`} />}</div>)}
           {photo && <CameraCapture projectId={projectId} value={photos} onChange={setPhotos} label="Transaction photo (required)" />}
         </div>
         <DialogFooter><Button onClick={() => onSubmit({ ...f, ...(photo ? { photo_ids: photos } : {}) })} disabled={photo && !photos.length} data-testid={`${testid}-submit`}>Save</Button></DialogFooter>
@@ -89,10 +92,12 @@ export function StoreTab({ project, perms }) {
         fields={[["quantity", "Quantity", "number", dlg.r.quantity - dlg.r.issued_qty], ["responsible_person", "Issued to (responsible person)"], ["note", "Note"]]}
         onSubmit={(f) => run(() => api.post(`/store/requests/${dlg.r.id}/issue`, f), "Issued", close)} />}
       {dlg?.type === "return" && <FormDialog testid="store-return" title={`Return ${dlg.r.item}`} photo projectId={pid} onClose={() => setDlg(null)}
+        hint={(f) => { const out = dlg.r.issued_qty - dlg.r.returned_qty - dlg.r.damaged_qty - dlg.r.lost_qty; const left = out - (f.good || 0) - (f.damaged || 0) - (f.lost || 0);
+          return left < 0 ? `Exceeds outstanding by ${-left} — only ${out} ${dlg.r.unit} still with site` : `Outstanding with site: ${out} ${dlg.r.unit} · after this return: ${left}`; }}
         fields={[["good", "Returned in good condition", "number", 0], ["damaged", "Damaged", "number", 0], ["lost", "Lost", "number", 0], ["responsible_person", "Returned by"], ["note", "Note"]]}
         onSubmit={(f) => run(() => api.post(`/store/requests/${dlg.r.id}/return`, f), "Return recorded", close)} />}
       {dlg?.type === "receive" && <FormDialog testid="store-receive" title="Receive stock into project store" photo projectId={pid} onClose={() => setDlg(null)}
-        fields={[["item", "Item"], ["kind", "Kind (material/tool)", "text", "material"], ["quantity", "Quantity", "number", 1], ["unit", "Unit", "text", "nos"], ["responsible_person", "Received from / by"], ["note", "Note"]]}
+        fields={[["item", "Item"], ["kind", "Kind", "select", "material", ["material", "tool"]], ["quantity", "Quantity", "number", 1], ["unit", "Unit", "text", "nos"], ["responsible_person", "Received from / by"], ["note", "Note"]]}
         onSubmit={(f) => run(() => api.post(`/projects/${pid}/store/receive`, f), "Stock received", close)} />}
     </div>
   );

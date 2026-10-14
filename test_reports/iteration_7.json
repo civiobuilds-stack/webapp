@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration-7 E2E of CIVIO commercial Store/BOQ/DPR-link/Labour attendance/CameraCapture. Added /app/backend/tests/test_store_boq_labour_iter7.py (5 pytest tests, ALL 5 PASS, serial run with -n 0 due to shared SA state): Store full flow (material/tool request create, engineer-cannot-approve 403, PM approve+reject, second-decision 400, receive stock, partial-then-full issue (stock decrement, status transitions requested→approved→partially_issued→issued), issue over-quantity 400, tool return good+damaged (stock bump + damaged counter), transactions list ⊇ {receive,issue,return}); Cross-tenant denial (different enterprise user → 403/404 on store endpoints); BOQ CRUD (engineer cannot POST BOQ 403, PM creates, dup code 409, GET lists with remaining_qty/progress_pct), DPR BOQ-linked (annotate adds code/desc/approved_qty/cumulative_before/excess flag, qty-exceeding-approved flagged excess=true, unknown boq_id 400, submit+approve bumps BOQ accepted_qty & project progress_percent, PDF OK); Labour attendance geofence (engineer-not-manager cannot PUT geofence 403, PM sets geofence, check-in inside 200m radius OK, duplicate same-day gang 400, check-in ~1.6km away 403 'outside the 200 m geofence', blank labour_incharge 400, check-out inside OK, double check-out 400, list returns geofence+rows+totals, no-geofence check-in 400 with clean message). Frontend Playwright: logged in as PM, opened proj-demo-1 — tab-defects is NOT present (commercial workspace confirmed), tab-dpr/tab-attendance/tab-store/tab-members all present; Store tab renders store-tab + new-material-request-btn + new-tool-request-btn + receive-stock-btn + store-stock-tab + store-txn-tab; Attendance renders labour-section with geofence-form + geofence-lat/lng/radius_m + geofence-save-btn + geofence-here-btn; DPR tab renders dpr-tab + new-dpr-btn + boq-panel. CameraCapture: with navigator.mediaDevices.getUserMedia overridden to reject (simulating permission denial), clicking camera-open-btn switches to fallback mode and renders camera-fallback-input; setting a file via the hidden input successfully posts to /api/files/upload (200), returns and renders a thumbnail inside camera-capture — Save button becomes enabled.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "StoreTab Receive-stock dialog", "issues": ["'Kind (material/tool)' is a free-text input defaulting to 'material' — a validated select/radio would prevent user error. Backend rejects anything other than material|tool."]},
+      {"screen": "StoreTab Return dialog", "issues": ["Three separate numeric fields for good/damaged/lost without a running total — PM can accidentally over-return. Server validates (returns 400) but UX should show remaining issued qty."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_store_boq_labour_iter7.py", "/app/test_reports/pytest/iter7b.xml"],
+  "action_items": [
+    "Consider converting Store 'Kind' input to a shadcn Select (material/tool) in StoreTab FormDialog receive-stock variant.",
+    "Show 'remaining to return / issued qty' hint in Store Return dialog to prevent 400 on over-return.",
+    "Minor: In LabourSection.jsx PunchDialog, 'Labour in-charge' input is disabled during check-out which is correct, but check-in dialog shows masons/helpers defaulting to 0 — consider a 'required > 0' hint since 0/0 is technically allowed by API (ge=0)."
+  ],
+  "critical_code_review_comments": [
+    "store.py is clean and under 350 lines. _dist/haversine implemented correctly. find_one_and_update on stock issue correctly uses atomic $gte guard to prevent oversubscription.",
+    "store.receive uses $setOnInsert for 'kind' — if an item was previously received as material and later as tool with the same name, kind stays as the first value. Minor data-model concern; unlikely in practice.",
+    "commercial.py imports 'store' inside _validate_dpr (lazy import) to avoid circular — fine but worth a module-level comment.",
+    "annotate_boq_entries filters by status 'approved' only; there is no endpoint to deprecate/revise a BOQ item once created. OK for MVP.",
+    "LabourSection.jsx GeofenceForm uses browser geolocation with high-accuracy + 15s timeout and surfaces errors via toast — good UX.",
+    "CameraCapture correctly falls back to <input type='file' accept='image/*'> when getUserMedia rejects; the toast message is user-friendly. Verified end-to-end.",
+    "ProjectDetail.jsx uses enterprise.modules (served by /auth/me) to gate Defects — commercial workspace excludes defects via MODULES map, so Defects tab is hidden as required.",
+    "store.py: no bulk GET of individual request by id — RequestRow actions use the request obj already in memory, so acceptable, but a GET /store/requests/{rid} helper could ease deep-linking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_store_boq_labour_iter7.py (new, 5 tests, 5/5 pass)",
+    "/app/test_reports/pytest/iter7b.xml (JUnit output)"
+  ],
+  "success_rate": {"backend": "100% (5/5 iter7b new); regression previous iter7 suite not re-run in this iteration", "frontend": "100% on tested surfaces (tabs render, data-testids present, store/labour/dpr tabs load, camera fallback + file upload works)"},
+  "test_credentials": "/app/memory/test_credentials.md used as-is. Reset_superadmin.py was invoked by the admin fixture before testing AND run again at the end so SA state is {password=CivioAdmin@2026, must_change_password=True} (preserved).",
+  "seed_data_creation": "Each run: wipes/restores proj-demo-1 store_requests/store_stock/store_txns/boq_items/labour_attendance/geofence. Cross-tenant test creates+deletes a TEST_XT_<ts>@example.com enterprise. Final DB state matches starting state (verified).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite for Store/BOQ/Labour lives at /app/backend/tests/test_store_boq_labour_iter7.py — MUST run with `pytest -n 0` (serial) because the SA password-change flow collides across parallel workers. Fixtures reset SA via scripts/reset_superadmin.py. Store endpoints: POST /projects/{pid}/store/requests, POST /store/requests/{rid}/decision|issue|return, POST /projects/{pid}/store/receive, GET /projects/{pid}/store/{requests,stock,transactions}. Labour: PUT /projects/{pid}/geofence, POST /projects/{pid}/labour/check-in, POST /labour/{lid}/check-out, GET /projects/{pid}/labour. BOQ: GET/POST /projects/{pid}/boq. DPR body may include boq_entries=[{boq_id,qty}] which is validated and excess-flagged inside create_dpr. For frontend, store dialog testid is 'store-req'|'store-issue'|'store-return'|'store-receive' (NOT 'material'/'tool'). CameraCapture fallback must be forced by overriding navigator.mediaDevices.getUserMedia at the context level because headless Chromium ships a fake media device by default.",
+  "rca of the issue": "No open bugs. Only cosmetic/UX recommendations (free-text 'kind' in receive-stock dialog; add 'remaining' hint in Return dialog)."
+}

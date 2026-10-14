@@ -94,3 +94,8 @@ audit logs. Premium forest-green "CIVIO BUILD" design, mobile-first for engineer
 
 ## Test credentials
 See `/app/memory/test_credentials.md`.
+
+## Verified (2026-06, Stage 7 — Store / Labour / BOQ-DPR E2E) ✅
+- iteration_7: Store (requests, approve/reject, partial/full issue, tool return good/damaged/lost, receive, stock, txns), BOQ + BOQ-linked DPR (excess flag), Labour geofence check-in/out, cross-tenant denial — all pass. Tests: backend/tests/test_store_boq_labour_iter7.py (run with -n 0).
+- Camera permission denied -> gallery file picker fallback verified.
+- UX: Receive-stock Kind is now a select; Return dialog shows outstanding qty + over-return warning.
