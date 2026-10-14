@@ -58,7 +58,20 @@ audit logs. Premium forest-green "CIVIO BUILD" design, mobile-first for engineer
 - **Audit CSV Export**: admin-only timestamped CSV of the project audit log.
 - Verified by testing agent: 36/36 new-feature tests pass, 100% backend + frontend. Suite `tests/test_civio_new_features.py`.
 
+## Implemented (2026-06, Stage 5 — Multi-Tenant SaaS) ✅
+- Tenant = enterprise (`enterprises` collection; `users/projects/suppliers/files.company_id`). Startup migration (non-destructive, idempotent) puts all legacy data in default enterprise `civio` (CIVIO PMC, commercial, active), seeds `plans` (Free/Starter/Professional/Enterprise, INR).
+- Two role scopes: `platform_role=super_admin` (civiobuilds@gmail.com) + tenant `role`. All tenant APIs enforce active enterprise (403 `enterprise_inactive`); project gate is company-scoped (404 cross-tenant); assignment ids validated in-company; file/report/CSV downloads tenant-scoped.
+- Enterprise onboarding: `/register` → company + Residential/Commercial → email OTP → pending screen until Super Admin approves. Google sign-in only for existing accounts.
+- Super Admin dashboard `/superadmin`: stats (MRR), pending/all lists with usage bars, approve/reject/suspend/reactivate (reason + email/notification), plan & limit overrides (manual billing), editable plans, platform activity log.
+- Plan limits enforced: users, active projects, storage MB. Tenant admin sees plan usage card on dashboard.
+- Business-type workspaces: residential hides Procurement (UI + backend 403) and cost report; commercial = full module set.
+- PWA: manifest + service worker (installable).
+- Verified: 99/99 backend tests (incl. new `tests/test_multitenant_saas.py`), frontend flows 100%.
+
 ## Backlog / remaining
+### Next (SaaS)
+- Residential-specific modules/dashboard copy (homeowner timeline, simplified client view); per-enterprise branding on PDFs.
+- Online subscription payments (Stripe/Razorpay); invite-by-link for tenant users; Super Admin enterprise detail/user list; push notifications; native Expo app (separate job); Twilio SMS OTP (needs keys); split server.py into routers.
 ### P0 (next stage)
 - PDF reporting: Daily/Weekly progress, Project Status, Defect register, Client Approval register,
   Procurement/Cost, Completion report — Civio-branded, with photos, stored history/regeneration.

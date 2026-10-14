@@ -30,6 +30,10 @@ TIMEOUT = 20
 
 
 def _login(email, pw):
+    if email.startswith("test_"):
+        from pymongo import MongoClient
+        MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]].users.update_one(
+            {"email": email.lower()}, {"$set": {"email_verified": True}})
     r = requests.post(f"{API}/auth/login", json={"email": email, "password": pw}, timeout=TIMEOUT)
     assert r.status_code == 200, f"login failed: {email} {r.status_code} {r.text}"
     return r.json()["access_token"]
@@ -50,6 +54,9 @@ def tokens():
         "role": "project_manager"
     }, timeout=TIMEOUT)
     assert r.status_code in (200, 201), r.text
+    from pymongo import MongoClient
+    MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]].users.update_one(
+        {"email": email.lower()}, {"$set": {"email_verified": True}})
     toks["outpm"] = _login(email, pwd)
     return toks
 

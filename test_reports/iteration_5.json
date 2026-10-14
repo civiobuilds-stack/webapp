@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration-5 end-to-end validation of the Multi-Tenant SaaS upgrade. Added /app/backend/tests/test_multitenant_saas.py (16 pytest tests — ALL PASSING). Covered: migration + regression (super admin + 4 demo users log in and still see proj-demo-1 and procurement; enterprise.modules includes procurement for commercial civio), enterprise registration (valid, invalid business_type -> 400, duplicate email -> 400, email_verified bypass works), pending-tenant lockdown (all tenant APIs return 403 enterprise_inactive while /auth/me works), super admin APIs (overview/enterprises/plans/audit all gated by platform_role=super_admin — PM gets 403; civio cannot be deactivated; reject/suspend require non-empty reason; approve->suspend->reactivate cycle flips access on and off and surfaces status_reason), subscription + plan editing persist, tenant isolation (B sees empty project list, 404 on proj-demo-1, 400 when assigning civio client to new project), plan limits (max_projects=1 blocks 2nd project 403; max_users=2 blocks 3rd user 403), business-type modules (residential enterprise's /suppliers and /material-requests return 403, modules list omits procurement), /auth/google/session with bogus session_id returns 401. Frontend tested with Playwright: super admin login redirects to /superadmin, every documented data-testid (sa-stat-*, sa-tab-*, sa-ent-civio with suspend button correctly absent, sa-plan-save-{free|starter|professional|enterprise}, sa-audit-list, nav-superadmin, workspace-badge) renders correctly; /register shows all type cards + inputs and transitions to the OTP screen after submit; PM user has no nav-superadmin and is redirected away from /superadmin; pending-workspace screen shows for an email-verified-but-unapproved owner with status 'Pending' and refresh/signout buttons; tab-procurement is present on proj-demo-1 (commercial civio).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/register-enterprise", "issue": "pydantic EmailStr rejects RFC-reserved TLDs like '@civio.test' with 422 before our 400 duplicate/business-type checks. Fine for prod; test code must use real-looking domains (@example.com)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multitenant_saas.py",
+    "/app/test_reports/pytest/multitenant.xml"
+  ],
+  "action_items": [
+    "Pre-existing /app/backend/tests/test_authorization.py and test_civio_new_features.py have broken fixture helpers (_register) left over from iteration-4's OTP rollout — they call POST /api/auth/register without a phone and without flipping email_verified, so every self-registered 'outsider' fixture fails to log in (422/401). This is NOT a regression from the multi-tenant layer (verified: all seeded accounts still log in and reach their projects via my new tests); it is debt in those helper functions. Suggest the main agent patch _register to accept a phone and either (a) POST to /api/auth/register-enterprise then flip email_verified in mongo, or (b) continue using /api/auth/register and then mongo-update email_verified before the fallback _login."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1728 lines — still well above the 700-line guideline. Splitting out routers/auth.py, routers/superadmin.py, routers/procurement.py, routers/reports.py would materially improve maintainability.",
+    "require_super_admin() returns an async checker that calls get_identity directly (bypassing enforce_active_enterprise) — correct, so a super admin whose own enterprise is somehow 'pending' can still administer the platform. Verified in test_superadmin_overview_and_plans.",
+    "sa_set_subscription requires body.plan_id even if the admin only wants to tweak limits — current UI always sends plan_id so OK, but future API clients might expect plan_id optional.",
+    "In migrate_multitenant, user migration uses company_id='civio' as a hard default. Fine today (single legacy tenant) but if demo data were ever extended across tenants the mapping would need a lookup table.",
+    "Enterprise.limits is duplicated on both the enterprise doc and the plans collection. sa_set_subscription writes limits from the request, so changing a plan's defaults in /plans does NOT retro-apply to already-provisioned enterprises. This is probably intentional (manual billing), but worth documenting.",
+    "ProtectedRoute shows PendingWorkspace for any non-super user whose enterprise is not 'active' — including when enterprise is undefined (treats missing as pending). Harmless but relies on /auth/me always returning enterprise. Verified it does."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multitenant_saas.py (new, 16 tests, 16 pass)"
+  ],
+  "success_rate": {"backend": "100% (16/16 multi-tenant tests pass; pre-existing test_authorization/test_civio_new_features fixture failures are iteration-4 debt, see action_items)", "frontend": "100% (super admin dashboard, register flow + OTP transition, pending workspace, non-super redirect, business-type procurement tab all verified via Playwright)"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md. All 5 documented accounts verified. Super admin civiobuilds@gmail.com confirmed to have platform_role=super_admin and company_id=civio with business_type=commercial.",
+  "seed_data_creation": "Each run creates ~6 TEST_ enterprises + their owner users + at most 1 TEST_ user per limits test and 1 TEST_ residential project. All are deleted at module teardown and additionally wiped by a post-run cleanup script. Confirmed: enterprises collection size returns to 1 (civio) and civio users count stays at 7.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The multi-tenant backend is covered by /app/backend/tests/test_multitenant_saas.py. Mongo cleanup pattern: delete users/projects/suppliers scoped by company_id, then the enterprise doc. OTP bypass for new enterprise owners: db.users.updateOne({email}, {$set:{email_verified:true}}) in DB test_database. Pre-existing test_authorization.py / test_civio_new_features.py have broken _register helpers that need a phone + email_verified patch; those files were not touched this iteration. Super admin flows must be exercised with Bearer tokens (login redirects to /superadmin automatically). Residential-only workspaces should NOT have procurement/suppliers/material-requests — enforced server-side via require_module.",
+  "rca of the issue": "No open bugs found in the multi-tenant SaaS upgrade. The upgrade is cleanly layered on top of the existing CIVIO app without regressions — tenant isolation, plan limits, pending-workspace lockdown, super-admin RBAC and business-type module gating all behave per spec."
+}

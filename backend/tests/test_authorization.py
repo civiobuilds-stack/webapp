@@ -29,18 +29,22 @@ DEMO_DEFECT = "def-1"
 
 
 def _login(email, password):
+    if email.startswith("test_"):
+        from pymongo import MongoClient
+        MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]].users.update_one(
+            {"email": email.lower()}, {"$set": {"email_verified": True}})
     r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
     assert r.status_code == 200, f"login failed {email}: {r.status_code} {r.text}"
     return r.json()["access_token"]
 
 
 def _register(email, password, name, role):
-    r = requests.post(f"{API}/auth/register",
-                      json={"email": email, "password": password, "name": name, "role": role},
-                      timeout=15)
-    # 200 if new, 400 if exists → fallback login
-    if r.status_code == 200:
-        return r.json()["access_token"]
+    requests.post(f"{API}/auth/register",
+                  json={"email": email, "password": password, "name": name, "role": role, "phone": "+910000000000"},
+                  timeout=15)
+    from pymongo import MongoClient
+    MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]].users.update_one(
+        {"email": email.lower()}, {"$set": {"email_verified": True}})
     return _login(email, password)
 
 
