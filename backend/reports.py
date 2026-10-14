@@ -158,6 +158,15 @@ def _photo_row(photos, styles):
     return flow
 
 
+def _fmt_time(rec):
+    if not rec:
+        return "—"
+    try:
+        return datetime.fromisoformat(rec["at"]).strftime("%d %b %H:%M UTC")
+    except Exception:
+        return "—"
+
+
 def build_dpr(project, d, photos, meta, brand):
     buf = io.BytesIO()
     st = _styles()
@@ -175,6 +184,16 @@ def build_dpr(project, d, photos, meta, brand):
     section("Work Activities — Planned vs Actual", ["Activity", "Unit", "Planned qty", "Actual qty", "Planned %", "Actual %"],
             [[a["description"], a.get("unit", ""), a.get("planned_qty", 0), a.get("actual_qty", 0), f"{a.get('planned_pct', 0)}%", f"{a.get('actual_pct', 0)}%"] for a in d.get("activities", [])],
             [60 * mm, 18 * mm, 24 * mm, 24 * mm, 20 * mm, 20 * mm], "No activities recorded")
+    if d.get("boq_entries"):
+        section("BOQ Quantities — Daily & Cumulative", ["BOQ", "Description", "Today", "Cumulative (accepted)", "Approved", "Progress"],
+                [[e["code"], f"{e['description']}{' (EXCESS — review)' if e.get('excess') else ''}" + (f" @ {e['location']}" if e.get("location") else ""),
+                  f"{e['qty']} {e['unit']}", f"{e.get('cumulative_now', e.get('cumulative_before', 0))}", f"{e['approved_qty']}",
+                  f"{round(min(e.get('cumulative_now', 0) / e['approved_qty'], 1) * 100, 1) if e['approved_qty'] else 0}%"] for e in d["boq_entries"]],
+                [18 * mm, 62 * mm, 22 * mm, 28 * mm, 22 * mm, 18 * mm], "—")
+    if d.get("labour"):
+        section("Labour Attendance", ["Labour in-charge", "Masons", "Helpers", "Check-in", "Check-out"],
+                [[l["labour_incharge"], l["masons"], l["helpers"], _fmt_time(l["check_in"]), _fmt_time(l.get("check_out"))] for l in d["labour"]],
+                [55 * mm, 25 * mm, 25 * mm, 32 * mm, 32 * mm], "—")
     section("Manpower", ["Trade", "Count", "Hours"], [[m["name"], m.get("count", 0), m.get("hours", 0)] for m in d.get("manpower", [])],
             [90 * mm, 40 * mm, 40 * mm], "—")
     section("Equipment", ["Equipment", "Count", "Hours"], [[m["name"], m.get("count", 0), m.get("hours", 0)] for m in d.get("equipment", [])],

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { LogIn, LogOut, FileDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { LabourSection } from "@/pages/project/LabourSection";
 
 const t = (v) => (v ? new Date(v).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—");
 const local = (v) => (v ? new Date(new Date(v).getTime() + 5.5 * 3600e3).toISOString().slice(0, 16) : "");
@@ -35,7 +36,7 @@ function CorrectDialog({ row, onClose, onDone }) {
   );
 }
 
-export function AttendanceTab({ project, userId, perms }) {
+export function AttendanceTab({ project, userId, perms, manages }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [rows, setRows] = useState([]);
   const [sum, setSum] = useState(null);
@@ -83,6 +84,7 @@ export function AttendanceTab({ project, userId, perms }) {
           </div>
         ))}
       </Card>
+      <LabourSection project={project} perms={perms} manages={manages} month={month} />
       {fix && <CorrectDialog row={fix} onClose={() => setFix(null)} onDone={() => { setFix(null); load(); }} />}
     </div>
   );

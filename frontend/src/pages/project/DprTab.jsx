@@ -47,6 +47,7 @@ function DprView({ dpr, perms, userId, onEdit, onChanged }) {
       </div>
       {dpr.review_comment && <p className="rounded-lg bg-muted p-3 text-sm" data-testid="dpr-review-comment"><b>Reviewer:</b> {dpr.review_comment}</p>}
       <div className="grid gap-4 md:grid-cols-2">
+        <Rows title="BOQ quantities (today)" rows={(dpr.boq_entries || []).map((e) => `${e.code} ${e.description}: ${e.qty} ${e.unit} @ ${e.location || "—"} · cumulative before ${e.cumulative_before}/${e.approved_qty}${e.excess ? " · ⚠ EXCESS — review" : ""}`)} />
         <Rows title="Activities (planned vs actual)" rows={dpr.activities.map((a) => `${a.description}: ${a.actual_qty}/${a.planned_qty} ${a.unit} · ${a.actual_pct}% vs ${a.planned_pct}%`)} />
         <Rows title="Manpower" rows={dpr.manpower.map((m) => `${m.name}: ${m.count}${m.hours ? ` · ${m.hours}h` : ""}`)} />
         <Rows title="Equipment" rows={dpr.equipment.map((m) => `${m.name}: ${m.count}${m.hours ? ` · ${m.hours}h` : ""}`)} />
@@ -66,6 +67,27 @@ function DprView({ dpr, perms, userId, onEdit, onChanged }) {
   );
 }
 
+function BoqPanel({ project }) {
+  const [items, setItems] = useState([]);
+  const [f, setF] = useState({ code: "", description: "", unit: "", approved_qty: 0 });
+  const load = () => api.get(`/projects/${project.id}/boq`).then((r) => setItems(r.data)).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [project.id]);
+  const add = async () => { try { await api.post(`/projects/${project.id}/boq`, f); toast.success("BOQ item approved"); setF({ code: "", description: "", unit: "", approved_qty: 0 }); load(); } catch (e) { toast.error(apiError(e.response?.data?.detail)); } };
+  return (
+    <Card className="space-y-2 p-4" data-testid="boq-panel">
+      <div className="font-semibold">Approved BOQ</div>
+      {items.map((b) => <div key={b.id} className="flex flex-wrap justify-between gap-2 text-sm" data-testid="boq-row"><span><b>{b.code}</b> {b.description}</span>
+        <span>{b.accepted_qty}/{b.approved_qty} {b.unit} · remaining {b.remaining_qty} · <b>{b.progress_pct}%</b></span></div>)}
+      <div className="flex flex-wrap gap-2 pt-2">
+        {[["code", "Code"], ["description", "Description"], ["unit", "Unit"], ["approved_qty", "Approved qty"]].map(([k, l]) => (
+          <input key={k} className="h-9 min-w-[100px] flex-1 rounded-md border bg-background px-2 text-sm" placeholder={l} type={k === "approved_qty" ? "number" : "text"} value={f[k]}
+            onChange={(e) => setF({ ...f, [k]: k === "approved_qty" ? Number(e.target.value) : e.target.value })} data-testid={`boq-${k}-input`} />))}
+        <Button size="sm" onClick={add} data-testid="boq-add-btn">Add (PM)</Button>
+      </div>
+    </Card>
+  );
+}
+
 export function DprTab({ project, userId, perms, initialDpr }) {
   const [list, setList] = useState([]);
   const [sel, setSel] = useState(null);
@@ -79,6 +101,7 @@ export function DprTab({ project, userId, perms, initialDpr }) {
     <div className="space-y-4" data-testid="dpr-tab">
       <div className="flex items-center justify-between"><h2 className="font-heading text-lg font-semibold">Daily Progress Reports</h2>
         {can(perms, "create") && <Button onClick={() => setEditing({})} data-testid="new-dpr-btn"><Plus className="h-4 w-4" /> New DPR</Button>}</div>
+      <BoqPanel project={project} />
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         <Card className="divide-y">
           {list.length === 0 && <p className="p-4 text-sm text-muted-foreground">No DPRs yet.</p>}

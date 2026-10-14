@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { DprTab } from "@/pages/project/DprTab";
 import { AttendanceTab } from "@/pages/project/AttendanceTab";
 import { MembersTab } from "@/pages/project/MembersTab";
+import { StoreTab } from "@/pages/project/StoreTab";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate, isManager } from "@/lib/format";
@@ -48,6 +49,7 @@ export default function ProjectDetail() {
   const showValue = manager || project.client_budget_visible;
   const hasProcurement = (user.enterprise?.modules || []).includes("procurement");
   const commercial = (user.enterprise?.modules || []).includes("dpr") && user.role !== "client";
+  const hasDefects = (user.enterprise?.modules || []).includes("defects");
 
   return (
     <div className="space-y-6">
@@ -80,7 +82,7 @@ export default function ProjectDetail() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
           <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
-          <TabsTrigger value="defects" data-testid="tab-defects">Defects</TabsTrigger>
+          {hasDefects && <TabsTrigger value="defects" data-testid="tab-defects">Defects</TabsTrigger>}
           {hasProcurement && <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>}
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
@@ -88,6 +90,7 @@ export default function ProjectDetail() {
           {manager && <TabsTrigger value="audit" data-testid="tab-audit">Audit Log</TabsTrigger>}
           {commercial && perm && <TabsTrigger value="dpr" data-testid="tab-dpr">DPR</TabsTrigger>}
           {commercial && perm && <TabsTrigger value="attendance" data-testid="tab-attendance">Attendance</TabsTrigger>}
+          {commercial && perm && <TabsTrigger value="store" data-testid="tab-store">Store</TabsTrigger>}
           {commercial && perm && <TabsTrigger value="members" data-testid="tab-members">Members</TabsTrigger>}
         </TabsList>
 
@@ -96,7 +99,7 @@ export default function ProjectDetail() {
         </TabsContent>
         <TabsContent value="activities" className="mt-5"><ActivitiesTab project={project} role={user.role} reload={load} /></TabsContent>
         <TabsContent value="progress" className="mt-5"><ProgressTab project={project} role={user.role} userId={user.id} /></TabsContent>
-        <TabsContent value="defects" className="mt-5"><DefectsTab project={project} role={user.role} /></TabsContent>
+        {hasDefects && <TabsContent value="defects" className="mt-5"><DefectsTab project={project} role={user.role} /></TabsContent>}
         {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
@@ -104,8 +107,9 @@ export default function ProjectDetail() {
         {manager && <TabsContent value="audit" className="mt-5"><AuditTab project={project} /></TabsContent>}
         {commercial && perm && <>
           <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} initialDpr={searchParams.get("dpr")} /></TabsContent>
-          <TabsContent value="attendance" className="mt-5"><AttendanceTab project={project} userId={user.id} perms={perm.permissions} /></TabsContent>
+          <TabsContent value="attendance" className="mt-5"><AttendanceTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} /></TabsContent>
           <TabsContent value="members" className="mt-5"><MembersTab project={project} meta={perm} /></TabsContent>
+          <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} /></TabsContent>
         </>}
       </Tabs>
     </div>

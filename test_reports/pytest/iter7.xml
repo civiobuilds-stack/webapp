@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="6" skipped="0" tests="9" time="19.463" timestamp="2026-10-14T15:47:25.032693+00:00" hostname="agent-env-dee7d55b-8a89-42d9-a6f5-71d6d08f0975"><testcase classname="tests.test_commercial_iter7.TestSuperAdminPasswordChange" name="test_full_flow" time="2.379"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_commercial_iter7.py:94: in test_full_flow
+    assert r.status_code == 200
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_commercial_iter7.TestEmployees" name="test_org_config_crud_and_employees" time="1.264"><failure message="assert 403 == 200&#10; +  where 403 = &lt;Response [403]&gt;.status_code">tests/test_commercial_iter7.py:121: in test_org_config_crud_and_employees
+    assert r.status_code == 200
+E   assert 403 == 200
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="tests.test_commercial_iter7.TestProjectPermissions" name="test_my_permissions_defaults" time="2.005"><failure message="KeyError: 'manages'">tests/test_commercial_iter7.py:191: in test_my_permissions_defaults
+    assert r.json()["manages"] is True
+           ^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'manages'</failure></testcase><testcase classname="tests.test_commercial_iter7.TestProjectPermissions" name="test_upsert_member_errors_and_override" time="1.740"><failure message="assert 403 == 400&#10; +  where 403 = &lt;Response [403]&gt;.status_code">tests/test_commercial_iter7.py:197: in test_upsert_member_errors_and_override
+    assert r.status_code == 400
+E   assert 403 == 400
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="tests.test_commercial_iter7.TestAttendance" name="test_full_flow" time="3.242" /><testcase classname="tests.test_commercial_iter7.TestDPR" name="test_full_dpr_flow" time="3.224"><failure message="TypeError: string indices must be integers, not 'str'">tests/test_commercial_iter7.py:384: in test_full_dpr_flow
+    assert any(x["type"] == "dpr_decision" for x in n), f"no notification: {n[:3]}"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_commercial_iter7.py:384: in &lt;genexpr&gt;
+    assert any(x["type"] == "dpr_decision" for x in n), f"no notification: {n[:3]}"
+               ^^^^^^^^^
+E   TypeError: string indices must be integers, not 'str'</failure></testcase><testcase classname="tests.test_commercial_iter7.TestPush" name="test_public_key_and_subscription" time="2.801" /><testcase classname="tests.test_commercial_iter7.TestDigest" name="test_settings_and_cron" time="1.263"><failure message="assert 403 == 200&#10; +  where 403 = &lt;Response [403]&gt;.status_code">tests/test_commercial_iter7.py:466: in test_settings_and_cron
+    assert r.status_code == 200
+E   assert 403 == 200
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="tests.test_commercial_iter7.TestResidentialScope" name="test_commercial_apis_blocked" time="1.336"><error message="failed on setup with &quot;AssertionError: {&quot;detail&quot;:{&quot;code&quot;:&quot;password_change_required&quot;,&quot;message&quot;:&quot;Please change your password to continue.&quot;}}&#10;assert 403 == 200&#10; +  where 403 = &lt;Response [403]&gt;.status_code&quot;">tests/test_commercial_iter7.py:559: in setup_method
+    assert r.status_code == 200, r.text
+E   AssertionError: {"detail":{"code":"password_change_required","message":"Please change your password to continue."}}
+E   assert 403 == 200
+E    +  where 403 = &lt;Response [403]&gt;.status_code</error></testcase></testsuite></testsuites>

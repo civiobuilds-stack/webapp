@@ -21,9 +21,9 @@ router = APIRouter()
 log = logging.getLogger("civio.commercial")
 IST = ZoneInfo("Asia/Kolkata")
 
-PERM_MODULES = ["dpr", "attendance", "progress", "defects", "procurement", "reports"]
+PERM_MODULES = ["dpr", "attendance", "store", "progress", "procurement", "reports"]
 ACTIONS = ["view", "create", "edit", "submit", "approve", "export", "delete"]
-ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"]}
+ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"], "store": ["view", "create"]}
 MEMBER_DEFAULT = {"dpr": ["view"], "attendance": ["create"]}
 DEFAULT_DEPARTMENTS = ["Civil", "MEP", "QA/QC", "Safety", "Planning", "Procurement"]
 DEFAULT_DESIGNATIONS = ["Project Manager", "Site Engineer", "Supervisor", "Foreman", "QA/QC Engineer", "Safety Officer", "Storekeeper"]
@@ -376,7 +376,15 @@ class DprPhoto(BaseModel):
     caption: str = ""
 
 
+class DprBoqEntry(BaseModel):
+    boq_id: str
+    qty: float = Field(gt=0)
+    location: str = ""
+    remarks: str = ""
+
+
 class DprIn(BaseModel):
+    boq_entries: List[DprBoqEntry] = []
     report_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     weather: str = ""
     activities: List[DprActivity] = []
@@ -403,6 +411,8 @@ async def _validate_dpr(pid, body: DprIn):
         raise HTTPException(status_code=400, detail="Photos must be uploaded to this project.")
     data = body.model_dump()
     data.pop("report_date")
+    import store
+    data["boq_entries"] = await store.annotate_boq_entries(pid, data["boq_entries"])
     return data
 
 
@@ -496,12 +506,19 @@ async def review_dpr(did: str, body: DprReview, user: dict = Depends(commercial_
     mapping = {"approve": "approved", "return": "returned", "reject": "rejected"}
     if body.action not in mapping:
         raise HTTPException(status_code=400, detail="Invalid action.")
+    if body.action == "approve" and any(e.get("excess") for e in d.get("boq_entries", [])) and not body.comment.strip():
+        raise HTTPException(status_code=400, detail="This DPR has quantities exceeding the approved BOQ. Add a review comment to approve the excess.")
     if body.action != "approve" and not body.comment.strip():
         raise HTTPException(status_code=400, detail="Please add a comment for the engineer.")
     st, ts = mapping[body.action], S.now_iso()
-    await S.db.dprs.update_one({"id": did}, {"$set": {"status": st, "review_comment": body.comment, "reviewed_by": user["id"],
+    res = await S.db.dprs.update_one({"id": did, "status": "submitted"}, {"$set": {"status": st, "review_comment": body.comment, "reviewed_by": user["id"],
                                                       "reviewed_by_name": user["name"], "reviewed_at": ts},
                                              "$push": {"history": {"status": st, "by": user["name"], "at": ts, "comment": body.comment}}})
+    if not res.modified_count:
+        raise HTTPException(status_code=409, detail="This DPR was already reviewed.")
+    if st == "approved" and d.get("boq_entries"):
+        import store
+        await store.apply_boq(d["project_id"], d["boq_entries"])
     await S.log_audit(d["project_id"], user, f"DPR {st}", "dpr", did, f"{d['report_date']}: {body.comment}")
     msg = {"approved": "approved", "returned": "returned for correction", "rejected": "rejected"}[st]
     await S.notify(d["created_by"], "dpr_decision", f"Your DPR for {d['report_date']} was {msg}.", d["project_id"],
@@ -528,6 +545,10 @@ async def dpr_pdf(did: str, request: Request, auth: str = Query(None)):
     meta = {"title": "Daily Progress Report", "code": f"{project.get('code', '')} · {d['report_date']}",
             "generated": datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"), "revision": d["status"].upper(),
             "confidential": f"Confidential — {user['_enterprise'].get('display_name') or user['_enterprise']['name']}"}
+    d["labour"] = await S.db.labour_attendance.find({"project_id": d["project_id"], "date": d["report_date"]}, {"_id": 0}).to_list(50)
+    boq = {b["id"]: b for b in await S.db.boq_items.find({"project_id": d["project_id"]}, {"_id": 0}).to_list(2000)}
+    for e in d.get("boq_entries", []):
+        e["cumulative_now"] = boq.get(e["boq_id"], {}).get("accepted_qty", 0)
     pdf = reports_module.build_dpr(project, d, photos, meta, S.report_brand(user["_enterprise"]))
     return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="DPR_{project.get("code")}_{d["report_date"]}.pdf"'})
 

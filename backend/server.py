@@ -41,7 +41,7 @@ ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "s
 DEFAULT_ENTERPRISE_ID = "civio"
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
-    "commercial": ALL_MODULES | {"dpr", "attendance", "members"},
+    "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store"},
     "residential": ALL_MODULES - {"procurement"},
 }
 DEFAULT_PLANS = [
@@ -1093,6 +1093,7 @@ async def enrich_defect(d: dict) -> dict:
 @api_router.get("/projects/{project_id}/defects")
 async def list_defects(project_id: str, user: dict = Depends(get_current_user)):
     await get_project_or_403(project_id, user)
+    require_module(user, "defects")
     defects = await db.defects.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for d in defects:
         await enrich_defect(d)
@@ -1102,6 +1103,7 @@ async def list_defects(project_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/projects/{project_id}/defects")
 async def create_defect(project_id: str, body: DefectIn, user: dict = Depends(require_roles("admin", "project_manager", "site_engineer"))):
     await get_project_or_403(project_id, user, write=True)
+    require_module(user, "defects")
     await ensure_company_users([body.assigned_to], user)
     if body.severity not in {"minor", "major", "critical"}:
         raise HTTPException(status_code=400, detail="Invalid severity.")
@@ -1136,6 +1138,7 @@ async def update_defect_status(defect_id: str, body: DefectStatusIn, user: dict 
     if not d:
         raise HTTPException(status_code=404, detail="Defect not found")
     await get_project_or_403(d["project_id"], user, write=True)
+    require_module(user, "defects")
     if body.status not in DEFECT_FLOW:
         raise HTTPException(status_code=400, detail="Invalid status.")
     # Only authorized reviewers (admin/PM) may verify & close
@@ -1918,6 +1921,8 @@ async def sa_audit(sa: dict = Depends(require_super_admin())):
 
 import commercial  # noqa: E402
 api_router.include_router(commercial.router)
+import store as store_module  # noqa: E402
+api_router.include_router(store_module.router)
 
 
 async def migrate_multitenant():
@@ -1947,6 +1952,8 @@ async def migrate_multitenant():
     await db.projects.create_index([("company_id", 1), ("code", 1)])
     await db.files.create_index([("company_id", 1), ("is_deleted", 1)])
     await db.dprs.create_index([("project_id", 1), ("report_date", 1)], unique=True)
+    await db.boq_items.create_index([("project_id", 1), ("code", 1)], unique=True)
+    await db.store_stock.create_index([("project_id", 1), ("item_key", 1)], unique=True)
     await db.project_members.create_index([("project_id", 1), ("user_id", 1)], unique=True)
     await db.attendance.create_index([("project_id", 1), ("user_id", 1), ("date", 1)], unique=True)
     await db.digest_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
