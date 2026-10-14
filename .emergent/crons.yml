@@ -1,0 +1,8 @@
+crons:
+  - name: weekly-digest
+    description: "Checks every 30 min and sends each commercial company's weekly digest at its configured time"
+    cron: "*/30 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/weekly-digest"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    method: POST
+    enabled: true

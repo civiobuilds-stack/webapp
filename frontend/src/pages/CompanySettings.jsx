@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, Trash2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { DigestSettingsCard } from "@/components/DigestSettingsCard";
 
 const FIELDS = [
   ["display_name", "Company name (shown on reports)"], ["tagline", "Tagline"], ["contact_email", "Contact email"],
@@ -70,6 +71,7 @@ export default function CompanySettings() {
         <div className="text-muted-foreground">Your brand on every report. <Badge variant="outline" className="ml-1 capitalize">{s.business_type} workspace</Badge></div>
       </div>
       <LogoCard hasLogo={s.has_logo} onChange={(v) => { setS({ ...s, has_logo: v }); refreshMe(); }} />
+      {s.business_type === "commercial" && <DigestSettingsCard />}
       <Card className="space-y-4 p-6">
         <h3 className="font-heading font-bold">Company details</h3>
         <div className="grid gap-4 sm:grid-cols-2">

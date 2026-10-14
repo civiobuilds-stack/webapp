@@ -1,4 +1,5 @@
 import os
+import uuid
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
@@ -30,6 +31,7 @@ def create_access_token(user_id: str, email: str, role: str) -> str:
         "role": role,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TTL_MIN),
         "type": "access",
+        "jti": uuid.uuid4().hex,
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 

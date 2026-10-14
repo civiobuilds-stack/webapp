@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { UserPlus, Loader2, HardHat, User, Briefcase, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { InviteDialog, InviteList } from "@/components/InvitePanel";
+import { EmployeesPanel } from "@/components/EmployeesPanel";
 
 const initials = (n) => (n || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 const ROLE_ICON = { site_engineer: HardHat, client: User, project_manager: Briefcase, admin: Briefcase };
@@ -51,6 +52,7 @@ export default function People() {
       </div>
 
       <InviteList refreshKey={inviteKey} />
+      {(user.enterprise?.modules || []).includes("dpr") && <EmployeesPanel isAdmin={user.role === "admin"} refreshKey={users.length} />}
 
       {loading ? (
         <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { DprTab } from "@/pages/project/DprTab";
+import { AttendanceTab } from "@/pages/project/AttendanceTab";
+import { MembersTab } from "@/pages/project/MembersTab";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate, isManager } from "@/lib/format";
@@ -25,6 +28,12 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [perm, setPerm] = useState(null);
+  useEffect(() => {
+    if ((user.enterprise?.modules || []).includes("dpr") && user.role !== "client")
+      api.get(`/projects/${id}/my-permissions`).then((r) => setPerm(r.data)).catch(() => setPerm(null));
+  }, [id, user]);
 
   const load = () => {
     api.get(`/projects/${id}`).then((r) => setProject(r.data)).catch(() => navigate("/projects")).finally(() => setLoading(false));
@@ -38,6 +47,7 @@ export default function ProjectDetail() {
   const manager = isManager(user.role);
   const showValue = manager || project.client_budget_visible;
   const hasProcurement = (user.enterprise?.modules || []).includes("procurement");
+  const commercial = (user.enterprise?.modules || []).includes("dpr") && user.role !== "client";
 
   return (
     <div className="space-y-6">
@@ -65,7 +75,7 @@ export default function ProjectDetail() {
         </div>
       </Card>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={searchParams.get("tab") || "overview"}>
         <TabsList className="flex w-full flex-wrap justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
@@ -76,6 +86,9 @@ export default function ProjectDetail() {
           <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
           {manager && <TabsTrigger value="audit" data-testid="tab-audit">Audit Log</TabsTrigger>}
+          {commercial && perm && <TabsTrigger value="dpr" data-testid="tab-dpr">DPR</TabsTrigger>}
+          {commercial && perm && <TabsTrigger value="attendance" data-testid="tab-attendance">Attendance</TabsTrigger>}
+          {commercial && perm && <TabsTrigger value="members" data-testid="tab-members">Members</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="mt-5">
@@ -89,6 +102,11 @@ export default function ProjectDetail() {
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
         <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} /></TabsContent>
         {manager && <TabsContent value="audit" className="mt-5"><AuditTab project={project} /></TabsContent>}
+        {commercial && perm && <>
+          <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} initialDpr={searchParams.get("dpr")} /></TabsContent>
+          <TabsContent value="attendance" className="mt-5"><AttendanceTab project={project} userId={user.id} perms={perm.permissions} /></TabsContent>
+          <TabsContent value="members" className="mt-5"><MembersTab project={project} meta={perm} /></TabsContent>
+        </>}
       </Tabs>
     </div>
   );

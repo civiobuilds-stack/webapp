@@ -4,20 +4,21 @@ from datetime import datetime, timezone, timedelta
 
 
 async def seed_all(db, hash_password, now_iso):
-    admin_email = os.environ.get("ADMIN_EMAIL", "civiobuilds@gmail.com")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "CivioAdmin@2026")
+    admin_email = os.environ["ADMIN_EMAIL"].lower()
 
-    # --- Admin (idempotent) ---
+    # --- Super Admin bootstrap: create once from secret; never reset an existing password ---
     admin = await db.users.find_one({"email": admin_email})
     if not admin:
-        admin = {
-            "id": "user-admin", "email": admin_email, "password_hash": hash_password(admin_password),
-            "name": "Civio Owner", "role": "admin", "phone": None, "company_id": "civio",
-            "is_active": True, "is_demo": False, "email_verified": True, "created_at": now_iso(),
-        }
-        await db.users.insert_one(admin)
-    elif not _ok(admin_password, admin["password_hash"]):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        initial = os.environ.get("SUPERADMIN_INITIAL_PASSWORD")
+        if initial:
+            await db.users.insert_one({
+                "id": "user-admin", "email": admin_email, "password_hash": hash_password(initial),
+                "name": "Civio Owner", "role": "admin", "phone": None, "company_id": "civio",
+                "is_active": True, "is_demo": False, "email_verified": True, "must_change_password": True,
+                "bootstrap_v2": True, "created_at": now_iso(),
+            })
+    elif not admin.get("bootstrap_v2"):
+        await db.users.update_one({"email": admin_email}, {"$set": {"must_change_password": True, "bootstrap_v2": True}})
 
     # Only seed demo content once.
     if await db.projects.find_one({"is_demo": True}):
@@ -181,10 +182,3 @@ async def seed_all(db, hash_password, now_iso):
         "details": project["name"], "created_at": now_iso(),
     })
 
-
-def _ok(pwd, hashed):
-    import bcrypt
-    try:
-        return bcrypt.checkpw(pwd.encode(), hashed.encode())
-    except Exception:
-        return False

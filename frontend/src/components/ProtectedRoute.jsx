@@ -2,6 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { PendingWorkspace } from "@/components/PendingWorkspace";
+import { ForcePasswordChange } from "@/components/ForcePasswordChange";
 
 const isSuper = (u) => u?.platform_role === "super_admin";
 
@@ -14,6 +15,7 @@ export function ProtectedRoute({ children }) {
       </div>
     );
   if (user === false) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <ForcePasswordChange />;
   if (!isSuper(user) && user.enterprise?.status !== "active") return <PendingWorkspace />;
   return children;
 }

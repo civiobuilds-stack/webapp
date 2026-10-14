@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings } from "lucide-react";
 import { API, getToken } from "@/lib/api";
+import { refreshPush } from "@/lib/push";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -30,6 +31,7 @@ export function AppShell({ children }) {
 
   const loadUnread = () => api.get("/notifications").then((r) => setUnread(r.data.unread)).catch(() => {});
   useEffect(() => { loadUnread(); }, [loc.pathname]);
+  useEffect(() => { refreshPush(); }, []);
 
   const manager = user?.role === "admin" || user?.role === "project_manager";
   const initials = (user?.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();

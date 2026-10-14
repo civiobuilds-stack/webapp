@@ -171,6 +171,42 @@ def invite_email_html(name: str, company: str, inviter: str, role: str, link: st
     )
 
 
+def digest_email_html(name: str, company: str, projects: list) -> str:
+    def li(items):
+        return "".join(f"<li>{escape(str(i))}</li>" for i in items) or "<li>None</li>"
+    blocks = []
+    for d in projects:
+        p, pend = d["project"], d["pending"]
+        behind = [f"{n}: planned {pl}% vs actual {ac}%" for n, pl, ac in d["behind"]]
+        blocks.append(
+            f'<tr><td style="padding:18px 28px;border-top:1px solid #eee">'
+            f'<div style="font-size:16px;font-weight:bold;color:#0D1B3E">{escape(p["name"])} · {escape(p.get("code", ""))}</div>'
+            f'<div style="font-size:13px;color:#1E6BFF;margin:4px 0 10px">Overall progress {p.get("progress_percent", 0)}% · {escape(p.get("status", ""))}</div>'
+            f'<table role="presentation" width="100%" style="font-size:13px;background:#eef3ff;border-radius:8px"><tr>'
+            f'<td style="padding:10px">Workforce<br/><b>{d["person_days"]} person-days</b></td>'
+            f'<td style="padding:10px">Site updates<br/><b>{d["approved_updates"]} approved · {d["dprs"]} DPRs · {d["photos"]} photos</b></td>'
+            f'<td style="padding:10px">Open defects<br/><b>{d["open_defects"]} ({d["critical_defects"]} critical)</b></td></tr></table>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Completed activities</p><ul style="margin:0;font-size:13px">{li(d["completed"])}</ul>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Behind plan</p><ul style="margin:0;font-size:13px">{li(behind)}</ul>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Quality &amp; safety</p><ul style="margin:0;font-size:13px">{li(d["quality"] + d["safety"])}</ul>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Material delays</p><ul style="margin:0;font-size:13px">{li(d["material_delays"])}</ul>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Pending approvals</p>'
+            f'<p style="margin:0;font-size:13px">{pend["progress_reviews"]} progress reviews · {pend["client_decisions"]} client decisions · '
+            f'{pend["material_requests"]} material requests · {pend["dprs"]} DPRs</p>'
+            f'<p style="margin:12px 0 4px;font-weight:bold;font-size:13px">Upcoming (next 14 days) &amp; risks</p>'
+            f'<ul style="margin:0;font-size:13px">{li(d["upcoming"] + ([d["next_plan"]] if d["next_plan"] else []))}</ul>'
+            f'</td></tr>')
+    return (
+        f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px"><tr><td align="center">'
+        f'<table role="presentation" width="600" style="background:#ffffff;border-radius:14px;overflow:hidden;{_BASE}">'
+        f'<tr><td style="background:#0D1B3E;padding:20px 28px;color:#fff;font-size:20px;font-weight:bold">{escape(company)} · Weekly digest</td></tr>'
+        f'<tr><td style="padding:22px 28px 6px"><p style="margin:0">Hi {escape(name)}, here is the past week across your active projects.</p></td></tr>'
+        f'{"".join(blocks) or "<tr><td style=padding:28px>No active projects.</td></tr>"}'
+        f'<tr><td style="padding:18px 28px;font-size:12px;color:#888">Sign in to CIVIO for full details and photos. Sent by CIVIO.</td></tr>'
+        f'</table></td></tr></table>'
+    )
+
+
 def report_email_html(name: str, project_name: str, report_title: str, revision: str) -> str:
     return (
         f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px">'

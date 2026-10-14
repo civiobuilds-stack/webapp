@@ -41,7 +41,7 @@ ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "s
 DEFAULT_ENTERPRISE_ID = "civio"
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
-    "commercial": ALL_MODULES,
+    "commercial": ALL_MODULES | {"dpr", "attendance", "members"},
     "residential": ALL_MODULES - {"procurement"},
 }
 DEFAULT_PLANS = [
@@ -69,7 +69,14 @@ def new_id() -> str:
 # ---------------------------------------------------------------------------
 async def get_current_user(request: Request) -> dict:
     user = await get_identity(request)
+    enforce_password_changed(user)
     return await enforce_active_enterprise(user)
+
+
+def enforce_password_changed(user: dict):
+    if user.get("must_change_password"):
+        raise HTTPException(status_code=403, detail={"code": "password_change_required",
+                                                     "message": "Please change your password to continue."})
 
 
 async def enforce_active_enterprise(user: dict) -> dict:
@@ -89,8 +96,9 @@ async def user_from_query_token(request: Request, auth: Optional[str]) -> dict:
             u = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
-        if not u or not u.get("is_active", True):
+        if not u or not u.get("is_active", True) or await db.revoked_tokens.find_one({"jti": payload.get("jti")}):
             raise HTTPException(status_code=401, detail="Invalid token")
+        enforce_password_changed(u)
         return await enforce_active_enterprise(u)
     return await get_current_user(request)
 
@@ -100,6 +108,7 @@ def require_super_admin():
         user = await get_identity(request)
         if user.get("platform_role") != "super_admin":
             raise HTTPException(status_code=403, detail="Super Admin access required.")
+        enforce_password_changed(user)
         return user
     return checker
 
@@ -156,9 +165,11 @@ async def get_identity(request: Request) -> dict:
     if jwt_token:
         try:
             payload = decode_token(jwt_token)
-            if payload.get("type") == "access":
+            if payload.get("type") == "access" and not await db.revoked_tokens.find_one({"jti": payload.get("jti")}):
                 user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
                 if user and user.get("is_active", True):
+                    user["_jti"] = payload.get("jti")
+                    user["_exp"] = payload.get("exp")
                     return user
         except Exception:
             pass
@@ -202,6 +213,8 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
         allowed = uid in project.get("engineer_ids", [])
     elif role == "client":
         allowed = project.get("client_id") == uid and not write
+    if not allowed and not write and role != "client":
+        allowed = bool(await db.project_members.find_one({"project_id": project_id, "user_id": uid}))
     if not allowed:
         raise HTTPException(status_code=403, detail="You cannot access this project.")
     return project
@@ -221,11 +234,15 @@ async def log_audit(project_id, actor, action, entity_type, entity_id, details="
     })
 
 
-async def notify(user_id, ntype, message, project_id=None, link=None, dedupe_key=None):
+async def notify(user_id, ntype, message, project_id=None, link=None, dedupe_key=None, push=False):
     if dedupe_key:
         existing = await db.notifications.find_one({"user_id": user_id, "dedupe_key": dedupe_key, "read": False})
         if existing:
             return
+    if push:
+        import commercial
+        url = link or (f"/projects/{project_id}" if project_id else "/notifications")
+        asyncio.create_task(commercial.send_push([user_id], "CIVIO", message, url, ntype))
     await db.notifications.insert_one({
         "id": new_id(),
         "user_id": user_id,
@@ -471,7 +488,10 @@ class PlanIn(BaseModel):
 
 def public_user(u: dict) -> dict:
     return {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"], "phone": u.get("phone"),
-            "platform_role": u.get("platform_role"), "company_id": u.get("company_id")}
+            "platform_role": u.get("platform_role"), "company_id": u.get("company_id"),
+            "must_change_password": bool(u.get("must_change_password")),
+            "employee_id": u.get("employee_id"), "designation": u.get("designation"),
+            "department": u.get("department"), "reporting_manager_id": u.get("reporting_manager_id")}
 
 
 def public_enterprise(e: Optional[dict]) -> Optional[dict]:
@@ -613,6 +633,9 @@ async def logout(request: Request, response: Response, user: dict = Depends(get_
     st = request.cookies.get("session_token")
     if st:
         await db.user_sessions.delete_one({"session_token": st})
+    if user.get("_jti"):
+        await db.revoked_tokens.update_one({"jti": user["_jti"]}, {"$set": {
+            "jti": user["_jti"], "expires_at": datetime.fromtimestamp(user["_exp"], tz=timezone.utc)}}, upsert=True)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("session_token", path="/")
     return {"ok": True}
@@ -652,6 +675,25 @@ async def google_session(body: GoogleSessionIn, response: Response):
     response.set_cookie("session_token", session_token, httponly=True, secure=True,
                         samesite="none", max_age=7 * 24 * 3600, path="/")
     return {"user": public_user(user)}
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+@api_router.post("/auth/change-password")
+async def change_password(body: ChangePasswordIn, user: dict = Depends(get_identity)):
+    doc = await db.users.find_one({"id": user["id"]})
+    if not doc.get("password_hash") or not verify_password(body.current_password, doc["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=400, detail="New password must be different from the current one.")
+    if not (any(c.isdigit() for c in body.new_password) and any(c.isalpha() for c in body.new_password)):
+        raise HTTPException(status_code=400, detail="Password must contain letters and numbers.")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_password(body.new_password),
+                                                            "must_change_password": False, "password_changed_at": now_iso()}})
+    return {"ok": True}
 
 
 @api_router.get("/auth/me")
@@ -909,7 +951,7 @@ async def create_progress(project_id: str, body: ProgressIn, user: dict = Depend
     await log_audit(project_id, user, f"progress update {status}", "progress_update", pid, act["name"])
     if status == "submitted" and project.get("project_manager_id"):
         await notify(project["project_manager_id"], "review_required",
-                     f"Progress update submitted for {act['name']} — review required.", project_id)
+                     f"Progress update submitted for {act['name']} — review required.", project_id, push=True)
     doc.pop("_id", None)
     return await enrich_progress(doc)
 
@@ -941,10 +983,10 @@ async def review_progress(pu_id: str, body: ReviewIn, user: dict = Depends(requi
         await apply_approved_progress(pu)
     if new_status == "pending_client_decision" and project.get("client_id"):
         await notify(project["client_id"], "client_decision",
-                     "A progress update is awaiting your decision.", pu["project_id"], dedupe_key=f"pending-{pu_id}")
+                     "A progress update is awaiting your decision.", pu["project_id"], dedupe_key=f"pending-{pu_id}", push=True)
     if new_status in {"clarification_needed", "rejected"}:
         await notify(pu["engineer_id"], "returned",
-                     f"Your progress update was {body.action}ed. Please review PM comments.", pu["project_id"])
+                     f"Your progress update was {body.action}ed. Please review PM comments.", pu["project_id"], push=True)
     pu = await db.progress_updates.find_one({"id": pu_id}, {"_id": 0})
     return await enrich_progress(pu)
 
@@ -988,8 +1030,8 @@ async def client_decision(pu_id: str, body: ClientDecisionIn, user: dict = Depen
         await apply_approved_progress(pu)
     if project.get("project_manager_id"):
         await notify(project["project_manager_id"], "decision",
-                     f"Client {body.action}ed a progress update.", pu["project_id"])
-    await notify(pu["engineer_id"], "decision", f"Client {body.action}ed your progress update.", pu["project_id"])
+                     f"Client {body.action}ed a progress update.", pu["project_id"], push=True)
+    await notify(pu["engineer_id"], "decision", f"Client {body.action}ed your progress update.", pu["project_id"], push=True)
     pu = await db.progress_updates.find_one({"id": pu_id}, {"_id": 0})
     return await enrich_progress(pu)
 
@@ -1023,7 +1065,7 @@ async def revise_progress(pu_id: str, body: ReviseIn, user: dict = Depends(requi
     await db.progress_updates.update_one({"id": pu_id}, {"$set": {"superseded_by": pid}})
     await log_audit(old["project_id"], user, "submitted revision", "progress_update", pid, f"v{doc['version']}")
     if project and project.get("project_manager_id"):
-        await notify(project["project_manager_id"], "review_required", "A revised progress update was submitted.", old["project_id"])
+        await notify(project["project_manager_id"], "review_required", "A revised progress update was submitted.", old["project_id"], push=True)
     doc.pop("_id", None)
     return await enrich_progress(doc)
 
@@ -1297,7 +1339,7 @@ async def create_material_request(project_id: str, body: MaterialRequestIn, user
     await log_audit(project_id, user, "raised material request", "material_request", mid, f"{body.quantity} {body.unit} {body.item}")
     project = await db.projects.find_one({"id": project_id}, {"_id": 0})
     if project and project.get("project_manager_id") and project["project_manager_id"] != user["id"]:
-        await notify(project["project_manager_id"], "material", f"Material request raised: {body.item}.", project_id)
+        await notify(project["project_manager_id"], "material", f"Material request raised: {body.item}.", project_id, push=True)
     doc.pop("_id", None)
     return await enrich_mr(doc)
 
@@ -1319,7 +1361,7 @@ async def decide_material_request(mr_id: str, body: MaterialDecisionIn, user: di
         "$push": {"history": {"status": new_status, "by": user["name"], "at": ts, "note": body.comment}},
     })
     await log_audit(mr["project_id"], user, f"material request {new_status}", "material_request", mr_id, body.comment)
-    await notify(mr["requested_by"], "material", f"Your material request for {mr['item']} was {new_status}.", mr["project_id"])
+    await notify(mr["requested_by"], "material", f"Your material request for {mr['item']} was {new_status}.", mr["project_id"], push=True)
     mr = await db.material_requests.find_one({"id": mr_id}, {"_id": 0})
     return await enrich_mr(mr)
 
@@ -1535,7 +1577,7 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
     recipients = await db.users.find({"id": {"$in": recipient_ids}}, {"_id": 0}).to_list(100)
     attachment = emailer.pdf_attachment(f"{titles[body.type].replace(' ', '_')}_{revision}.pdf", pdf_bytes)
     for r in recipients:
-        await notify(r["id"], "report", f"A new report was published: {titles[body.type]}.", project_id)
+        await notify(r["id"], "report", f"A new report was published: {titles[body.type]}.", project_id, push=True)
     mailable = [r for r in recipients if r.get("email")]
 
     async def _send_all():
@@ -1874,6 +1916,10 @@ async def sa_audit(sa: dict = Depends(require_super_admin())):
     return await db.platform_audit.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 
+import commercial  # noqa: E402
+api_router.include_router(commercial.router)
+
+
 async def migrate_multitenant():
     for p in DEFAULT_PLANS:
         await db.plans.update_one({"id": p["id"]}, {"$setOnInsert": p}, upsert=True)
@@ -1900,6 +1946,14 @@ async def migrate_multitenant():
     await db.enterprises.create_index("id", unique=True)
     await db.projects.create_index([("company_id", 1), ("code", 1)])
     await db.files.create_index([("company_id", 1), ("is_deleted", 1)])
+    await db.dprs.create_index([("project_id", 1), ("report_date", 1)], unique=True)
+    await db.project_members.create_index([("project_id", 1), ("user_id", 1)], unique=True)
+    await db.attendance.create_index([("project_id", 1), ("user_id", 1), ("date", 1)], unique=True)
+    await db.digest_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
+    await db.push_subscriptions.create_index("endpoint", unique=True)
+    await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.users.create_index([("company_id", 1), ("employee_id", 1)], unique=True,
+                                partialFilterExpression={"employee_id": {"$type": "string"}})
 
 
 app.include_router(api_router)

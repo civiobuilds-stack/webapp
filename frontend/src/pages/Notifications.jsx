@@ -1,3 +1,4 @@
+import { PushCard } from "@/components/PushCard";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -34,6 +35,8 @@ export default function Notifications() {
         <div><h1 className="font-heading text-3xl font-bold">Notifications</h1><p className="text-muted-foreground">Updates across your projects.</p></div>
         <Button variant="outline" onClick={markAll} data-testid="mark-all-read-btn"><CheckCheck className="h-4 w-4" /> Mark all read</Button>
       </div>
+
+      <PushCard />
 
       {loading ? (
         <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>

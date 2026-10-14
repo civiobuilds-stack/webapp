@@ -158,6 +158,43 @@ def _photo_row(photos, styles):
     return flow
 
 
+def build_dpr(project, d, photos, meta, brand):
+    buf = io.BytesIO()
+    st = _styles()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=32 * mm, bottomMargin=20 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    s = [Paragraph("Daily Progress Report", st["CivH1"]),
+         Paragraph(f"{project['name']}  ·  {project.get('code', '')}", st["CivH2"]),
+         _kv_table([("Report date", _fmt_date(d["report_date"])), ("Weather", d.get("weather") or "—"),
+                    ("Prepared by", d.get("created_by_name", "")), ("Status", d["status"].title()),
+                    ("Reviewed by", d.get("reviewed_by_name") or "—"), ("Review comment", d.get("review_comment") or "—")], st)]
+
+    def section(title, header, rows, widths, empty):
+        s.append(Paragraph(title, st["CivH2"]))
+        s.append(_data_table(header, rows or [[empty] + [""] * (len(header) - 1)], st, widths))
+
+    section("Work Activities — Planned vs Actual", ["Activity", "Unit", "Planned qty", "Actual qty", "Planned %", "Actual %"],
+            [[a["description"], a.get("unit", ""), a.get("planned_qty", 0), a.get("actual_qty", 0), f"{a.get('planned_pct', 0)}%", f"{a.get('actual_pct', 0)}%"] for a in d.get("activities", [])],
+            [60 * mm, 18 * mm, 24 * mm, 24 * mm, 20 * mm, 20 * mm], "No activities recorded")
+    section("Manpower", ["Trade", "Count", "Hours"], [[m["name"], m.get("count", 0), m.get("hours", 0)] for m in d.get("manpower", [])],
+            [90 * mm, 40 * mm, 40 * mm], "—")
+    section("Equipment", ["Equipment", "Count", "Hours"], [[m["name"], m.get("count", 0), m.get("hours", 0)] for m in d.get("equipment", [])],
+            [90 * mm, 40 * mm, 40 * mm], "—")
+    section("Materials", ["Item", "Qty", "Status", "Note"], [[m["item"], f"{m.get('quantity', 0)} {m.get('unit', '')}", m.get("status", "").title(), m.get("note", "")] for m in d.get("materials", [])],
+            [60 * mm, 30 * mm, 25 * mm, 55 * mm], "—")
+    for title, key in [("Quality Observations", "quality_notes"), ("Safety Observations", "safety_notes"),
+                       ("Delays & Hindrances", "delays"), ("Next-day Activities", "next_day_plan")]:
+        s.append(Paragraph(title, st["CivH2"]))
+        s.append(Paragraph((d.get(key) or "—").replace("\n", "<br/>"), st["CivBody"]))
+    if photos:
+        s.append(Paragraph("Site Photographs", st["CivH2"]))
+        s.extend(_photo_row(photos, st))
+
+    def on_page(canvas, dd):
+        _header_footer(canvas, dd, meta, brand)
+    doc.build(s, onFirstPage=on_page, onLaterPages=on_page)
+    return buf.getvalue()
+
+
 def build_report(report_type, ctx):
     """ctx: dict with project, meta, activities, milestones, progress, defects, photos, cost."""
     buf = io.BytesIO()
