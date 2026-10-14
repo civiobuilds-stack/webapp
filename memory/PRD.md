@@ -99,3 +99,13 @@ See `/app/memory/test_credentials.md`.
 - iteration_7: Store (requests, approve/reject, partial/full issue, tool return good/damaged/lost, receive, stock, txns), BOQ + BOQ-linked DPR (excess flag), Labour geofence check-in/out, cross-tenant denial — all pass. Tests: backend/tests/test_store_boq_labour_iter7.py (run with -n 0).
 - Camera permission denied -> gallery file picker fallback verified.
 - UX: Receive-stock Kind is now a select; Return dialog shows outstanding qty + over-return warning.
+
+## Implemented (2026-06, Stage 8 — Branding, Labour Cost, Overdue Tools) ✅
+- Real CIVIO wordmark logo (white bg) in sidebar, mobile header, login, landing, PWA icons (icon-192/512), PDF header fallback (backend/assets/civio-icon.png); BrandLoader (logo on white) for all page loads + index.html splash. CIVIO PMC enterprise logo re-uploaded.
+- Labour wages: company default (Settings) + per-project override (Attendance tab). Labour cost JSON/PDF per project & company (MTD + last 7 days). Weekly email with PDF to company admins — cron Sat 18:00 IST (/api/cron/labour-cost).
+- Overdue tool reminders: daily 09:00 IST cron (/api/cron/tool-overdue) push + email to requester, CC PM/store approvers; dedupe per request/day; manual "remind now"; Overdue badge in Store.
+- Super Admin password = Civio@123456, no forced change.
+- Tests: iteration_8 (18/18 backend pass, frontend pass). backend/labour_cost.py.
+
+## Backlog
+- P1 Low stock alerts; P1 native mobile app; P2 payment gateway for subscriptions; P2 split server.py

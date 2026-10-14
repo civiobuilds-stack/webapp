@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 8 — verified SA password change (Civio@123456 w/ no forced change), labour wages (admin/PM/eng RBAC + project override fallback), labour cost report (JSON + PDF for project & company, admin-only on company), send-now + logs (status=sent), cron auth + 200 with Bearer WEBHOOK_CRON_SECRET, overdue tool listing + remind-now dedupe + tool_overdue notification, and frontend data-testids (brand-logo, login-brand-logo, landing-logo, labour-cost-settings + wage/pdf/send/remind btns in Settings, labour-cost-panel + project-wage-form in Attendance). manifest icons 192/512 and /civio-logo.png all 200.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Company Settings · Company logo card", "issues": ["The square company-logo tile shows the circular 'civio-icon.png' which is cropped by the rounded container; the civiQ wordmark (civio-logo.png) would read better. Minor."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_labour_cost_overdue_iter8.py", "/app/test_reports/pytest/iter8.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "labour_cost.send_cost_report: labour_cost_logs.update_one filters only by {company_id,key}; if two concurrent manual runs share a company the finish writer could race, but current UUID-timestamp key avoids collisions in practice.",
+    "remind_overdue dedupe uses unique index on tool_reminders (request_id,date) implicit via insert_one try/except — ensure a unique index exists in production to prevent dupes across replicas; currently relies on insert raising on duplicate id only.",
+    "project_cost aggregates in Python after a single find — fine for a 7-day window; OK."
+  ],
+  "updated_files": ["/app/backend/tests/test_labour_cost_overdue_iter8.py"],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% of required data-testids present"},
+  "test_credentials": "civiobuilds@gmail.com / Civio@123456 (no forced change); pm@civio.build / CivioPM@2026; engineer@civio.build / CivioEng@2026. Note: /app/memory/test_credentials.md still shows the OLD admin password 'CivioAdmin@2026' and forced-change note — recommend updating that doc.",
+  "seed_data_creation": "Transient labour_attendance rows + one store_requests + tool_reminders rows created inside the test file; all cleaned up by autouse fixture / explicit cleanup test / module teardown. Wage settings restored to pre-test values. SA password reset via scripts/reset_superadmin.py at start and end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_labour_cost_overdue_iter8.py is now the regression file for iter8 features — run with: cd /app && REACT_APP_BACKEND_URL=... MONGO_URL=... DB_NAME=... pytest backend/tests/test_labour_cost_overdue_iter8.py -o addopts='' . It uses direct Mongo inserts for the overdue tool scenario (full /store/requests → approve → receive → issue flow requires project geofence + photo uploads which were out-of-scope). /app/memory/test_credentials.md still has stale admin password; please update when touching docs."
+}
