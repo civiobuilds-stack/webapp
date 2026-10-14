@@ -22,7 +22,8 @@ import reports as reports_module
 import emailer
 import csv
 import io
-import random
+import secrets
+import httpx
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -35,6 +36,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("civio")
 
 MANAGER_ROLES = {"admin", "project_manager"}
+DEFAULT_ENTERPRISE_ID = "civio"
+ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
+MODULES = {
+    "commercial": ALL_MODULES,
+    "residential": ALL_MODULES - {"procurement"},
+}
+DEFAULT_PLANS = [
+    {"id": "free", "name": "Free Trial", "price_monthly": 0, "max_users": 5, "max_projects": 2, "max_storage_mb": 500,
+     "description": "Try CIVIO with a small team."},
+    {"id": "starter", "name": "Starter", "price_monthly": 2999, "max_users": 15, "max_projects": 10, "max_storage_mb": 5120,
+     "description": "For growing builders and small PMCs."},
+    {"id": "professional", "name": "Professional", "price_monthly": 7999, "max_users": 50, "max_projects": 40, "max_storage_mb": 25600,
+     "description": "Multi-site firms with full workflows."},
+    {"id": "enterprise", "name": "Enterprise", "price_monthly": 19999, "max_users": 500, "max_projects": 300, "max_storage_mb": 204800,
+     "description": "Large enterprises with custom limits."},
+]
 
 
 def now_iso() -> str:
@@ -49,23 +66,115 @@ def new_id() -> str:
 # Auth helpers
 # ---------------------------------------------------------------------------
 async def get_current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
-    user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-    if not user or not user.get("is_active", True):
-        raise HTTPException(status_code=401, detail="User not found")
+    user = await get_identity(request)
+    return await enforce_active_enterprise(user)
+
+
+async def enforce_active_enterprise(user: dict) -> dict:
+    ent = await db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0})
+    if not ent or ent.get("status") != "active":
+        raise HTTPException(status_code=403, detail={
+            "code": "enterprise_inactive", "status": (ent or {}).get("status", "missing"),
+            "message": "Your company workspace is not active yet."})
+    user["_enterprise"] = ent
     return user
+
+
+async def user_from_query_token(request: Request, auth: Optional[str]) -> dict:
+    if auth and "Authorization" not in request.headers:
+        try:
+            payload = decode_token(auth)
+            u = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if not u or not u.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return await enforce_active_enterprise(u)
+    return await get_current_user(request)
+
+
+def require_super_admin():
+    async def checker(request: Request) -> dict:
+        user = await get_identity(request)
+        if user.get("platform_role") != "super_admin":
+            raise HTTPException(status_code=403, detail="Super Admin access required.")
+        return user
+    return checker
+
+
+def require_module(user: dict, module: str):
+    ent = user.get("_enterprise") or {}
+    if module not in MODULES.get(ent.get("business_type", "commercial"), set()):
+        raise HTTPException(status_code=403, detail="This module is not available for your workspace type.")
+
+
+async def ensure_company_users(ids, user: dict):
+    ids = {i for i in ids if i}
+    if not ids:
+        return
+    n = await db.users.count_documents({"id": {"$in": list(ids)}, "company_id": user["company_id"]})
+    if n != len(ids):
+        raise HTTPException(status_code=400, detail="One or more selected users do not belong to your company.")
+
+
+async def enforce_limit(user: dict, kind: str):
+    ent = user.get("_enterprise") or {}
+    limits = ent.get("limits") or {}
+    cid = user["company_id"]
+    if kind == "users":
+        used = await db.users.count_documents({"company_id": cid, "is_active": {"$ne": False}})
+        cap = limits.get("max_users")
+    elif kind == "projects":
+        used = await db.projects.count_documents({"company_id": cid, "is_archived": {"$ne": True}})
+        cap = limits.get("max_projects")
+    else:
+        used = await storage_used_mb(cid)
+        cap = limits.get("max_storage_mb")
+    if cap is not None and used >= cap:
+        raise HTTPException(status_code=403, detail=f"Your plan limit for {kind} has been reached ({cap}). Please contact CIVIO to upgrade.")
+
+
+async def storage_used_mb(company_id: str) -> float:
+    agg = await db.files.aggregate([
+        {"$match": {"company_id": company_id, "is_deleted": False}},
+        {"$group": {"_id": None, "total": {"$sum": "$size"}}},
+    ]).to_list(1)
+    return round((agg[0]["total"] if agg else 0) / (1024 * 1024), 2)
+
+
+async def get_identity(request: Request) -> dict:
+    # 1) App JWT (access_token cookie or Bearer)
+    token = request.cookies.get("access_token")
+    bearer = request.headers.get("Authorization", "")
+    if bearer.startswith("Bearer "):
+        bearer = bearer[7:]
+    else:
+        bearer = ""
+    jwt_token = token or bearer
+    if jwt_token:
+        try:
+            payload = decode_token(jwt_token)
+            if payload.get("type") == "access":
+                user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+                if user and user.get("is_active", True):
+                    return user
+        except Exception:
+            pass
+    # 2) Emergent Google session_token (session_token cookie or Bearer)
+    session_token = request.cookies.get("session_token") or bearer
+    if session_token:
+        sess = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+        if sess:
+            exp = sess["expires_at"]
+            if isinstance(exp, str):
+                exp = datetime.fromisoformat(exp)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp >= datetime.now(timezone.utc):
+                user = await db.users.find_one({"id": sess["user_id"]}, {"_id": 0, "password_hash": 0})
+                if user and user.get("is_active", True):
+                    return user
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 
 def require_roles(*roles):
@@ -77,7 +186,7 @@ def require_roles(*roles):
 
 
 async def get_project_or_403(project_id: str, user: dict, write: bool = False) -> dict:
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    project = await db.projects.find_one({"id": project_id, "company_id": user.get("company_id")}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     role = user["role"]
@@ -303,8 +412,51 @@ class ReportIn(BaseModel):
     recommendations: str = ""
 
 
+class EnterpriseRegisterIn(BaseModel):
+    company_name: str = Field(min_length=2)
+    business_type: str
+    city: str = ""
+    name: str
+    email: EmailStr
+    phone: str = Field(min_length=6)
+    password: str = Field(min_length=6)
+
+
+class EnterpriseStatusIn(BaseModel):
+    status: str  # active | rejected | suspended
+    reason: str = ""
+
+
+class SubscriptionIn(BaseModel):
+    plan_id: str
+    price_monthly: Optional[float] = None
+    max_users: Optional[int] = None
+    max_projects: Optional[int] = None
+    max_storage_mb: Optional[int] = None
+    billing_status: str = "manual"
+
+
+class PlanIn(BaseModel):
+    name: str
+    price_monthly: float = Field(ge=0)
+    max_users: int = Field(ge=1)
+    max_projects: int = Field(ge=1)
+    max_storage_mb: int = Field(ge=1)
+    description: str = ""
+
+
 def public_user(u: dict) -> dict:
-    return {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"], "phone": u.get("phone")}
+    return {"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"], "phone": u.get("phone"),
+            "platform_role": u.get("platform_role"), "company_id": u.get("company_id")}
+
+
+def public_enterprise(e: Optional[dict]) -> Optional[dict]:
+    if not e:
+        return None
+    bt = e.get("business_type", "commercial")
+    return {"id": e["id"], "name": e["name"], "business_type": bt, "status": e.get("status"),
+            "status_reason": e.get("status_reason"), "plan_id": e.get("plan_id"),
+            "modules": sorted(MODULES.get(bt, ALL_MODULES))}
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +470,7 @@ OTP_TTL_MIN = 10
 
 
 async def issue_otp(user_doc: dict):
-    code = f"{random.randint(0, 999999):06d}"
+    code = f"{secrets.randbelow(1000000):06d}"
     expires = (datetime.now(timezone.utc) + timedelta(minutes=OTP_TTL_MIN)).isoformat()
     await db.users.update_one({"id": user_doc["id"]}, {"$set": {
         "otp_code": code, "otp_expires": expires, "otp_attempts": 0,
@@ -347,6 +499,36 @@ async def register(body: RegisterIn, response: Response):
     await db.users.insert_one(doc)
     await issue_otp(doc)
     return {"requires_verification": True, "email": email}
+
+
+@api_router.post("/auth/register-enterprise")
+async def register_enterprise(body: EnterpriseRegisterIn):
+    email = body.email.lower()
+    if body.business_type not in MODULES:
+        raise HTTPException(status_code=400, detail="Business type must be residential or commercial.")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+    plan = await db.plans.find_one({"id": "free"}, {"_id": 0}) or DEFAULT_PLANS[0]
+    eid, uid, ts = new_id(), new_id(), now_iso()
+    ent = {
+        "id": eid, "name": body.company_name.strip(), "business_type": body.business_type, "city": body.city,
+        "status": "pending", "status_reason": None, "owner_id": uid, "owner_email": email,
+        "owner_name": body.name, "phone": body.phone, "plan_id": plan["id"],
+        "price_monthly": plan["price_monthly"], "billing_status": "manual",
+        "limits": {k: plan[k] for k in ("max_users", "max_projects", "max_storage_mb")},
+        "created_at": ts, "approved_at": None,
+    }
+    await db.enterprises.insert_one(ent)
+    await db.users.insert_one({
+        "id": uid, "email": email, "password_hash": hash_password(body.password), "name": body.name,
+        "role": "admin", "phone": body.phone, "company_id": eid, "is_active": True, "is_demo": False,
+        "email_verified": False, "created_at": ts,
+    })
+    await issue_otp({"id": uid, "email": email, "name": body.name})
+    async for sa in db.users.find({"platform_role": "super_admin"}, {"_id": 0, "id": 1}):
+        await notify(sa["id"], "enterprise", f"New enterprise registration: {ent['name']} ({body.business_type}).",
+                     link="/superadmin")
+    return {"requires_verification": True, "email": email, "enterprise_status": "pending"}
 
 
 @api_router.post("/auth/verify-otp")
@@ -402,14 +584,72 @@ async def login(body: LoginIn, response: Response):
 
 
 @api_router.post("/auth/logout")
-async def logout(response: Response, user: dict = Depends(get_current_user)):
+async def logout(request: Request, response: Response, user: dict = Depends(get_identity)):
+    st = request.cookies.get("session_token")
+    if st:
+        await db.user_sessions.delete_one({"session_token": st})
     response.delete_cookie("access_token", path="/")
+    response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
 
+class GoogleSessionIn(BaseModel):
+    session_id: str
+
+
+@api_router.post("/auth/google/session")
+async def google_session(body: GoogleSessionIn, response: Response):
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": body.session_id},
+            )
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    email = (data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="Google sign-in did not return an email.")
+    user = await db.users.find_one({"email": email}, {"_id": 0, "password_hash": 0})
+    if not user or not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="No CIVIO account exists for this Google email. Register your company or ask your admin to invite you.")
+    session_token = data.get("session_token")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    expires = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user["id"], "session_token": session_token,
+        "expires_at": expires.isoformat(), "created_at": now_iso(),
+    })
+    response.set_cookie("session_token", session_token, httponly=True, secure=True,
+                        samesite="none", max_age=7 * 24 * 3600, path="/")
+    return {"user": public_user(user)}
+
+
 @api_router.get("/auth/me")
-async def me(user: dict = Depends(get_current_user)):
-    return public_user(user)
+async def me(user: dict = Depends(get_identity)):
+    out = public_user(user)
+    out["enterprise"] = public_enterprise(await db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0}))
+    return out
+
+
+@api_router.get("/enterprise/usage")
+async def enterprise_usage(user: dict = Depends(require_roles("admin", "project_manager"))):
+    ent = user["_enterprise"]
+    cid = user["company_id"]
+    plan = await db.plans.find_one({"id": ent.get("plan_id")}, {"_id": 0})
+    return {
+        "enterprise": public_enterprise(ent), "plan": plan, "limits": ent.get("limits") or {},
+        "price_monthly": ent.get("price_monthly"),
+        "usage": {
+            "users": await db.users.count_documents({"company_id": cid, "is_active": {"$ne": False}}),
+            "projects": await db.projects.count_documents({"company_id": cid, "is_archived": {"$ne": True}}),
+            "storage_mb": await storage_used_mb(cid),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +657,7 @@ async def me(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 @api_router.get("/users")
 async def list_users(role: Optional[str] = None, user: dict = Depends(require_roles("admin", "project_manager"))):
-    q = {"company_id": "civio"}
+    q = {"company_id": user["company_id"]}
     if role:
         q["role"] = role
     users = await db.users.find(q, {"_id": 0, "password_hash": 0}).to_list(1000)
@@ -435,11 +675,12 @@ async def create_user(body: UserCreateIn, user: dict = Depends(require_roles("ad
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
     if body.role in {"site_engineer", "client"} and not (body.phone and len(body.phone) >= 6):
         raise HTTPException(status_code=400, detail="A phone number is required for engineers and clients.")
+    await enforce_limit(user, "users")
     uid = new_id()
     doc = {
         "id": uid, "email": email, "password_hash": hash_password(body.password),
         "name": body.name, "role": body.role, "phone": body.phone,
-        "company_id": "civio", "is_active": True, "is_demo": False,
+        "company_id": user["company_id"], "is_active": True, "is_demo": False,
         "email_verified": False, "created_at": now_iso(),
     }
     await db.users.insert_one(doc)
@@ -465,7 +706,7 @@ async def enrich_project(p: dict) -> dict:
 @api_router.get("/projects")
 async def list_projects(user: dict = Depends(get_current_user)):
     role, uid = user["role"], user["id"]
-    q = {"company_id": "civio", "is_archived": {"$ne": True}}
+    q = {"company_id": user["company_id"], "is_archived": {"$ne": True}}
     if role == "project_manager":
         q["$or"] = [{"project_manager_id": uid}, {"created_by": uid}]
     elif role == "site_engineer":
@@ -480,12 +721,14 @@ async def list_projects(user: dict = Depends(get_current_user)):
 
 @api_router.post("/projects")
 async def create_project(body: ProjectIn, user: dict = Depends(require_roles("admin", "project_manager"))):
-    if await db.projects.find_one({"code": body.code, "company_id": "civio"}):
+    if await db.projects.find_one({"code": body.code, "company_id": user["company_id"]}):
         raise HTTPException(status_code=400, detail="Project code already in use.")
+    await ensure_company_users([body.client_id, body.project_manager_id, *body.engineer_ids], user)
+    await enforce_limit(user, "projects")
     pid = new_id()
     doc = body.model_dump()
     doc.update({
-        "id": pid, "company_id": "civio",
+        "id": pid, "company_id": user["company_id"],
         "project_manager_id": body.project_manager_id or user["id"],
         "progress_percent": 0.0, "is_archived": False, "is_demo": False,
         "created_by": user["id"], "created_at": now_iso(),
@@ -509,6 +752,7 @@ async def get_project(project_id: str, user: dict = Depends(get_current_user)):
 @api_router.put("/projects/{project_id}")
 async def update_project(project_id: str, body: ProjectIn, user: dict = Depends(require_roles("admin", "project_manager"))):
     await get_project_or_403(project_id, user, write=True)
+    await ensure_company_users([body.client_id, body.project_manager_id, *body.engineer_ids], user)
     data = body.model_dump()
     data.pop("code", None)  # code immutable
     await db.projects.update_one({"id": project_id}, {"$set": data})
@@ -520,6 +764,7 @@ async def update_project(project_id: str, body: ProjectIn, user: dict = Depends(
 @api_router.post("/projects/{project_id}/assign")
 async def assign(project_id: str, body: AssignIn, user: dict = Depends(require_roles("admin", "project_manager"))):
     await get_project_or_403(project_id, user, write=True)
+    await ensure_company_users([body.client_id, body.project_manager_id, *(body.engineer_ids or [])], user)
     update = {}
     if body.engineer_ids is not None:
         update["engineer_ids"] = body.engineer_ids
@@ -557,6 +802,7 @@ async def list_activities(project_id: str, user: dict = Depends(get_current_user
 @api_router.post("/projects/{project_id}/activities")
 async def create_activity(project_id: str, body: ActivityIn, user: dict = Depends(require_roles("admin", "project_manager"))):
     await get_project_or_403(project_id, user, write=True)
+    await ensure_company_users([body.assigned_engineer_id], user)
     aid = new_id()
     doc = body.model_dump()
     doc.update({
@@ -696,7 +942,7 @@ async def client_decision(pu_id: str, body: ClientDecisionIn, user: dict = Depen
     pu = await db.progress_updates.find_one({"id": pu_id}, {"_id": 0})
     if not pu:
         raise HTTPException(status_code=404, detail="Update not found")
-    project = await db.projects.find_one({"id": pu["project_id"]}, {"_id": 0})
+    project = await db.projects.find_one({"id": pu["project_id"], "company_id": user["company_id"]}, {"_id": 0})
     if not project or project.get("client_id") != user["id"]:
         raise HTTPException(status_code=403, detail="You cannot decide on this update.")
     if pu["status"] != "pending_client_decision":
@@ -789,6 +1035,7 @@ async def list_defects(project_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/projects/{project_id}/defects")
 async def create_defect(project_id: str, body: DefectIn, user: dict = Depends(require_roles("admin", "project_manager", "site_engineer"))):
     await get_project_or_403(project_id, user, write=True)
+    await ensure_company_users([body.assigned_to], user)
     if body.severity not in {"minor", "major", "critical"}:
         raise HTTPException(status_code=400, detail="Invalid severity.")
     count = await db.defects.count_documents({"project_id": project_id})
@@ -858,6 +1105,7 @@ async def upload_file(file: UploadFile = File(...), project_id: str = Form(None)
         await get_project_or_403(project_id, user, write=True)
     elif user["role"] == "client":
         raise HTTPException(status_code=403, detail="Clients cannot upload files.")
+    await enforce_limit(user, "storage")
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
     fid = new_id()
     path = f"{storage.APP_NAME}/uploads/{user['id']}/{fid}.{ext}"
@@ -872,7 +1120,7 @@ async def upload_file(file: UploadFile = File(...), project_id: str = Form(None)
         "id": fid, "storage_path": result["path"], "original_filename": file.filename,
         "content_type": content_type, "size": result.get("size", len(data)),
         "project_id": project_id, "caption": caption, "uploaded_by": user["id"],
-        "is_deleted": False, "created_at": now_iso(),
+        "company_id": user["company_id"], "is_deleted": False, "created_at": now_iso(),
     }
     await db.files.insert_one(doc)
     doc.pop("_id", None)
@@ -914,19 +1162,8 @@ async def project_photos(project_id: str, user: dict = Depends(get_current_user)
 @api_router.get("/files/{file_id}/download")
 async def download_file(file_id: str, request: Request, auth: str = Query(None)):
     # img tags cannot send headers: accept ?auth=<token>
-    if auth and "Authorization" not in request.headers:
-        token = auth
-        try:
-            payload = decode_token(token)
-            u = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        if not u:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = u
-    else:
-        user = await get_current_user(request)
-    record = await db.files.find_one({"id": file_id, "is_deleted": False}, {"_id": 0})
+    user = await user_from_query_token(request, auth)
+    record = await db.files.find_one({"id": file_id, "is_deleted": False, "company_id": user["company_id"]}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="File not found")
     if record.get("project_id"):
@@ -1022,6 +1259,7 @@ async def list_material_requests(project_id: str, user: dict = Depends(get_curre
 @api_router.post("/projects/{project_id}/material-requests")
 async def create_material_request(project_id: str, body: MaterialRequestIn, user: dict = Depends(require_roles("admin", "project_manager", "site_engineer"))):
     await get_project_or_403(project_id, user, write=True)
+    require_module(user, "procurement")
     mid = new_id()
     ts = now_iso()
     doc = body.model_dump()
@@ -1063,13 +1301,14 @@ async def decide_material_request(mr_id: str, body: MaterialDecisionIn, user: di
 
 @api_router.get("/suppliers")
 async def list_suppliers(user: dict = Depends(require_roles("admin", "project_manager"))):
-    return await db.suppliers.find({"company_id": "civio"}, {"_id": 0}).sort("name", 1).to_list(1000)
+    return await db.suppliers.find({"company_id": user["company_id"]}, {"_id": 0}).sort("name", 1).to_list(1000)
 
 
 @api_router.post("/suppliers")
 async def create_supplier(body: SupplierIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    require_module(user, "procurement")
     doc = body.model_dump()
-    doc.update({"id": new_id(), "company_id": "civio", "created_at": now_iso()})
+    doc.update({"id": new_id(), "company_id": user["company_id"], "created_at": now_iso()})
     await db.suppliers.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -1095,7 +1334,8 @@ async def list_purchase_orders(project_id: str, user: dict = Depends(get_current
 @api_router.post("/projects/{project_id}/purchase-orders")
 async def create_purchase_order(project_id: str, body: PurchaseOrderIn, user: dict = Depends(require_roles("admin", "project_manager"))):
     await get_project_or_403(project_id, user, write=True)
-    supplier = await db.suppliers.find_one({"id": body.supplier_id}, {"_id": 0})
+    require_module(user, "procurement")
+    supplier = await db.suppliers.find_one({"id": body.supplier_id, "company_id": user["company_id"]}, {"_id": 0})
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
     items = [i.model_dump() for i in body.items]
@@ -1116,7 +1356,7 @@ async def create_purchase_order(project_id: str, body: PurchaseOrderIn, user: di
     await db.purchase_orders.insert_one(doc)
     await log_audit(project_id, user, "created purchase order", "purchase_order", pid, f"{doc['po_number']} {_inr_plain(total)}")
     if body.material_request_id:
-        await db.material_requests.update_one({"id": body.material_request_id}, {"$set": {"status": "ordered"}})
+        await db.material_requests.update_one({"id": body.material_request_id, "project_id": project_id}, {"$set": {"status": "ordered"}})
     doc.pop("_id", None)
     return await enrich_po(doc)
 
@@ -1286,16 +1526,7 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
 
 @api_router.get("/reports/{report_id}/download")
 async def download_report(report_id: str, request: Request, auth: str = Query(None)):
-    if auth and "Authorization" not in request.headers:
-        try:
-            payload = decode_token(auth)
-            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    else:
-        user = await get_current_user(request)
+    user = await user_from_query_token(request, auth)
     rec = await db.reports.find_one({"id": report_id}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -1311,16 +1542,7 @@ async def download_report(report_id: str, request: Request, auth: str = Query(No
 # ---------------------------------------------------------------------------
 @api_router.get("/projects/{project_id}/audit-log/export")
 async def export_audit_csv(project_id: str, request: Request, auth: str = Query(None)):
-    if auth and "Authorization" not in request.headers:
-        try:
-            payload = decode_token(auth)
-            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    else:
-        user = await get_current_user(request)
+    user = await user_from_query_token(request, auth)
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Only an admin can export the audit log.")
     project = await get_project_or_403(project_id, user)
@@ -1335,6 +1557,143 @@ async def export_audit_csv(project_id: str, request: Request, auth: str = Query(
     fname = f"civio_audit_{project.get('code', 'project')}_{stamp}.csv"
     return Response(content=out.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+# ---------------------------------------------------------------------------
+# Super Admin (platform scope)
+# ---------------------------------------------------------------------------
+async def platform_audit(actor, action, enterprise_id, details=""):
+    await db.platform_audit.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor["name"], "action": action,
+        "enterprise_id": enterprise_id, "details": details, "created_at": now_iso(),
+    })
+
+
+async def enterprise_with_usage(e: dict) -> dict:
+    cid = e["id"]
+    e["usage"] = {
+        "users": await db.users.count_documents({"company_id": cid, "is_active": {"$ne": False}}),
+        "projects": await db.projects.count_documents({"company_id": cid, "is_archived": {"$ne": True}}),
+        "storage_mb": await storage_used_mb(cid),
+    }
+    return e
+
+
+@api_router.get("/superadmin/overview")
+async def sa_overview(sa: dict = Depends(require_super_admin())):
+    ents = await db.enterprises.find({}, {"_id": 0}).to_list(10000)
+    by_status = {s: sum(1 for e in ents if e.get("status") == s) for s in ("pending", "active", "suspended", "rejected")}
+    by_type = {t: sum(1 for e in ents if e.get("business_type") == t) for t in MODULES}
+    mrr = sum(e.get("price_monthly") or 0 for e in ents if e.get("status") == "active")
+    return {"enterprises": len(ents), "by_status": by_status, "by_type": by_type, "mrr": mrr,
+            "users": await db.users.count_documents({}), "projects": await db.projects.count_documents({"is_archived": {"$ne": True}})}
+
+
+@api_router.get("/superadmin/enterprises")
+async def sa_list_enterprises(status: Optional[str] = None, q: Optional[str] = None, sa: dict = Depends(require_super_admin())):
+    query = {}
+    if status:
+        query["status"] = status
+    if q:
+        import re
+        rx = {"$regex": re.escape(q), "$options": "i"}
+        query["$or"] = [{"name": rx}, {"owner_email": rx}, {"city": rx}]
+    ents = await db.enterprises.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [await enterprise_with_usage(e) for e in ents]
+
+
+@api_router.post("/superadmin/enterprises/{eid}/status")
+async def sa_set_status(eid: str, body: EnterpriseStatusIn, sa: dict = Depends(require_super_admin())):
+    if body.status not in {"active", "rejected", "suspended"}:
+        raise HTTPException(status_code=400, detail="Invalid status.")
+    if eid == DEFAULT_ENTERPRISE_ID and body.status != "active":
+        raise HTTPException(status_code=400, detail="The platform's own workspace cannot be deactivated.")
+    ent = await db.enterprises.find_one({"id": eid}, {"_id": 0})
+    if not ent:
+        raise HTTPException(status_code=404, detail="Enterprise not found")
+    if body.status in {"rejected", "suspended"} and not body.reason.strip():
+        raise HTTPException(status_code=400, detail="Please give a reason.")
+    update = {"status": body.status, "status_reason": body.reason or None, "status_updated_at": now_iso()}
+    if body.status == "active" and not ent.get("approved_at"):
+        update["approved_at"] = now_iso()
+    await db.enterprises.update_one({"id": eid}, {"$set": update})
+    await platform_audit(sa, f"enterprise -> {body.status}", eid, body.reason)
+    if ent.get("owner_id"):
+        msg = {"active": f"Your workspace {ent['name']} is approved and active.",
+               "rejected": f"Your workspace registration was rejected: {body.reason}",
+               "suspended": f"Your workspace has been suspended: {body.reason}"}[body.status]
+        await notify(ent["owner_id"], "enterprise", msg)
+        if ent.get("owner_email"):
+            await emailer.send_email(to=ent["owner_email"], subject=f"CIVIO workspace update — {ent['name']}",
+                                     html=f"<p>Hello {ent.get('owner_name', '')},</p><p>{msg}</p><p>— Team CIVIO</p>")
+    return await enterprise_with_usage(await db.enterprises.find_one({"id": eid}, {"_id": 0}))
+
+
+@api_router.put("/superadmin/enterprises/{eid}/subscription")
+async def sa_set_subscription(eid: str, body: SubscriptionIn, sa: dict = Depends(require_super_admin())):
+    ent = await db.enterprises.find_one({"id": eid}, {"_id": 0})
+    if not ent:
+        raise HTTPException(status_code=404, detail="Enterprise not found")
+    plan = await db.plans.find_one({"id": body.plan_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=400, detail="Unknown plan.")
+    limits = {k: getattr(body, k) if getattr(body, k) is not None else plan[k]
+              for k in ("max_users", "max_projects", "max_storage_mb")}
+    if any(v < 1 for v in limits.values()):
+        raise HTTPException(status_code=400, detail="Limits must be at least 1.")
+    price = body.price_monthly if body.price_monthly is not None else plan["price_monthly"]
+    await db.enterprises.update_one({"id": eid}, {"$set": {
+        "plan_id": plan["id"], "limits": limits, "price_monthly": max(price, 0), "billing_status": body.billing_status,
+    }})
+    await platform_audit(sa, "subscription updated", eid, f"{plan['name']} ₹{price} {limits}")
+    return await enterprise_with_usage(await db.enterprises.find_one({"id": eid}, {"_id": 0}))
+
+
+@api_router.get("/superadmin/plans")
+async def sa_list_plans(sa: dict = Depends(require_super_admin())):
+    return await db.plans.find({}, {"_id": 0}).sort("price_monthly", 1).to_list(100)
+
+
+@api_router.put("/superadmin/plans/{plan_id}")
+async def sa_update_plan(plan_id: str, body: PlanIn, sa: dict = Depends(require_super_admin())):
+    res = await db.plans.update_one({"id": plan_id}, {"$set": body.model_dump()})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    await platform_audit(sa, "plan updated", None, f"{plan_id}: {body.model_dump()}")
+    return await db.plans.find_one({"id": plan_id}, {"_id": 0})
+
+
+@api_router.get("/superadmin/audit")
+async def sa_audit(sa: dict = Depends(require_super_admin())):
+    return await db.platform_audit.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+async def migrate_multitenant():
+    for p in DEFAULT_PLANS:
+        await db.plans.update_one({"id": p["id"]}, {"$setOnInsert": p}, upsert=True)
+    ent_plan = DEFAULT_PLANS[-1]
+    await db.enterprises.update_one({"id": DEFAULT_ENTERPRISE_ID}, {"$setOnInsert": {
+        "id": DEFAULT_ENTERPRISE_ID, "name": "CIVIO PMC", "business_type": "commercial", "city": "Mumbai",
+        "status": "active", "status_reason": None, "owner_id": "user-admin",
+        "owner_email": os.environ["ADMIN_EMAIL"].lower(), "owner_name": "Civio Owner", "phone": None,
+        "plan_id": ent_plan["id"], "price_monthly": 0, "billing_status": "internal",
+        "limits": {k: ent_plan[k] for k in ("max_users", "max_projects", "max_storage_mb")},
+        "created_at": now_iso(), "approved_at": now_iso(),
+    }}, upsert=True)
+    missing = {"$or": [{"company_id": {"$exists": False}}, {"company_id": None}]}
+    for coll in ("users", "projects", "suppliers"):
+        await db[coll].update_many(missing, {"$set": {"company_id": DEFAULT_ENTERPRISE_ID}})
+    async for f in db.files.find(missing, {"_id": 0, "id": 1, "project_id": 1, "uploaded_by": 1}):
+        src = None
+        if f.get("project_id"):
+            src = await db.projects.find_one({"id": f["project_id"]}, {"_id": 0, "company_id": 1})
+        if not src and f.get("uploaded_by"):
+            src = await db.users.find_one({"id": f["uploaded_by"]}, {"_id": 0, "company_id": 1})
+        await db.files.update_one({"id": f["id"]}, {"$set": {"company_id": (src or {}).get("company_id", DEFAULT_ENTERPRISE_ID)}})
+    await db.users.update_one({"email": os.environ["ADMIN_EMAIL"].lower()}, {"$set": {"platform_role": "super_admin"}})
+    await db.enterprises.create_index("id", unique=True)
+    await db.projects.create_index([("company_id", 1), ("code", 1)])
+    await db.files.create_index([("company_id", 1), ("is_deleted", 1)])
 
 
 app.include_router(api_router)
@@ -1360,6 +1719,7 @@ async def startup():
     await seed_module.seed_all(db, hash_password, now_iso)
     # Legacy/demo accounts predate OTP — mark them verified so they remain usable.
     await db.users.update_many({"email_verified": {"$exists": False}}, {"$set": {"email_verified": True}})
+    await migrate_multitenant()
 
 
 @app.on_event("shutdown")

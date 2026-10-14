@@ -9,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -32,9 +32,19 @@ export function AppShell({ children }) {
   const manager = user?.role === "admin" || user?.role === "project_manager";
   const initials = (user?.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
+  const nav = user?.platform_role === "super_admin"
+    ? [{ to: "/superadmin", label: "Super Admin", icon: ShieldCheck, testid: "nav-superadmin" }, ...NAV]
+    : NAV;
+
   const NavLinks = ({ onClick }) => (
     <nav className="flex flex-col gap-1">
-      {NAV.filter((n) => !n.managerOnly || manager).map((n) => {
+      {user?.enterprise && (
+        <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2" data-testid="workspace-badge">
+          <div className="truncate text-xs font-semibold text-white">{user.enterprise.name}</div>
+          <div className="text-[10px] uppercase tracking-widest text-white/50">{user.enterprise.business_type} workspace</div>
+        </div>
+      )}
+      {nav.filter((n) => !n.managerOnly || manager).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (
           <Link key={n.to} to={n.to} onClick={onClick} data-testid={n.testid}

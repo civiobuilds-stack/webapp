@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { FileText, Loader2, Download, FilePlus } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 const TYPES = {
   progress: "Construction Progress Report",
@@ -62,6 +63,8 @@ export function ReportsTab({ project, role }) {
 }
 
 function GenerateDialog({ projectId, onDone }) {
+  const { user } = useAuth();
+  const hasProcurement = (user?.enterprise?.modules || []).includes("procurement");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [type, setType] = useState("progress");
@@ -87,7 +90,7 @@ function GenerateDialog({ projectId, onDone }) {
           <div className="space-y-1.5"><Label>Report type</Label>
             <Select value={type} onValueChange={setType}>
               <SelectTrigger data-testid="report-type-select"><SelectValue /></SelectTrigger>
-              <SelectContent>{Object.entries(TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+              <SelectContent>{Object.entries(TYPES).filter(([k]) => k !== "cost" || hasProcurement).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">

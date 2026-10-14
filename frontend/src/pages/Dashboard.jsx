@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PlanUsageCard } from "@/components/PlanUsageCard";
 import {
   FolderKanban, ClipboardCheck, AlertTriangle, Bell, TrendingUp, ArrowRight, HardHat, Building2,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export default function Dashboard() {
     Promise.all([api.get("/dashboard/summary"), api.get("/projects")])
       .then(([s, p]) => { setSummary(s.data); setProjects(p.data); })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const manager = isManager(user.role);
@@ -74,6 +76,8 @@ export default function Dashboard() {
               </Card>
             ))}
       </div>
+
+      {user.role === "admin" && <PlanUsageCard />}
 
       <div>
         <div className="mb-4 flex items-center justify-between">

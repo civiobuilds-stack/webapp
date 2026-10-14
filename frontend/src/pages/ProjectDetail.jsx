@@ -37,6 +37,7 @@ export default function ProjectDetail() {
 
   const manager = isManager(user.role);
   const showValue = manager || project.client_budget_visible;
+  const hasProcurement = (user.enterprise?.modules || []).includes("procurement");
 
   return (
     <div className="space-y-6">
@@ -70,7 +71,7 @@ export default function ProjectDetail() {
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
           <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
           <TabsTrigger value="defects" data-testid="tab-defects">Defects</TabsTrigger>
-          <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>
+          {hasProcurement && <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>}
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
@@ -83,7 +84,7 @@ export default function ProjectDetail() {
         <TabsContent value="activities" className="mt-5"><ActivitiesTab project={project} role={user.role} reload={load} /></TabsContent>
         <TabsContent value="progress" className="mt-5"><ProgressTab project={project} role={user.role} userId={user.id} /></TabsContent>
         <TabsContent value="defects" className="mt-5"><DefectsTab project={project} role={user.role} /></TabsContent>
-        <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>
+        {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
         <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} /></TabsContent>

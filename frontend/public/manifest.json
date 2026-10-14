@@ -1,0 +1,12 @@
+{
+  "name": "CIVIO — Construction Project Management",
+  "short_name": "CIVIO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0D1B3E",
+  "icons": [
+    { "src": "/civio-icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/civio-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -1,6 +1,9 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
+import { PendingWorkspace } from "@/components/PendingWorkspace";
+
+const isSuper = (u) => u?.platform_role === "super_admin";
 
 export function ProtectedRoute({ children }) {
   const { user } = useAuth();
@@ -11,5 +14,12 @@ export function ProtectedRoute({ children }) {
       </div>
     );
   if (user === false) return <Navigate to="/login" replace />;
+  if (!isSuper(user) && user.enterprise?.status !== "active") return <PendingWorkspace />;
+  return children;
+}
+
+export function SuperAdminRoute({ children }) {
+  const { user } = useAuth();
+  if (!isSuper(user)) return <Navigate to="/" replace />;
   return children;
 }
