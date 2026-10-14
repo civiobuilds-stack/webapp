@@ -14,6 +14,9 @@ import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
 import People from "@/pages/People";
 import Notifications from "@/pages/Notifications";
+import Landing from "@/pages/Landing";
+import AcceptInvite from "@/pages/AcceptInvite";
+import CompanySettings from "@/pages/CompanySettings";
 import SuperAdmin from "@/pages/SuperAdmin";
 import { SuperAdminRoute } from "@/components/ProtectedRoute";
 
@@ -46,6 +49,13 @@ function AuthCallback() {
   );
 }
 
+function HomeRoute() {
+  const { user } = useAuth();
+  if (user === null) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (user === false) return <Landing />;
+  return <Shell><Dashboard /></Shell>;
+}
+
 function AppRouter() {
   const location = useLocation();
   // Synchronous check (not in useEffect) to win the race before ProtectedRoute runs.
@@ -54,7 +64,9 @@ function AppRouter() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/" element={<Shell><Dashboard /></Shell>} />
+      <Route path="/invite/:token" element={<AcceptInvite />} />
+      <Route path="/" element={<HomeRoute />} />
+      <Route path="/settings" element={<Shell><CompanySettings /></Shell>} />
       <Route path="/projects" element={<Shell><Projects /></Shell>} />
       <Route path="/projects/:id" element={<Shell><ProjectDetail /></Shell>} />
       <Route path="/people" element={<Shell><People /></Shell>} />

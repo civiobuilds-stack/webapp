@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { UserPlus, Loader2, HardHat, User, Briefcase, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { InviteDialog, InviteList } from "@/components/InvitePanel";
 
 const initials = (n) => (n || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 const ROLE_ICON = { site_engineer: HardHat, client: User, project_manager: Briefcase, admin: Briefcase };
@@ -22,6 +23,7 @@ export default function People() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [inviteKey, setInviteKey] = useState(0);
 
   const load = () => api.get("/users").then((r) => setUsers(r.data)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -42,8 +44,13 @@ export default function People() {
           <h1 className="font-heading text-3xl font-bold">People</h1>
           <p className="text-muted-foreground">Create and manage engineer and client accounts. They can then be assigned to projects.</p>
         </div>
-        <AddPersonDialog isAdmin={user.role === "admin"} onCreated={load} />
+        <div className="flex flex-wrap gap-2">
+          <InviteDialog isAdmin={user.role === "admin"} onSent={() => setInviteKey((k) => k + 1)} />
+          <AddPersonDialog isAdmin={user.role === "admin"} onCreated={load} />
+        </div>
       </div>
+
+      <InviteList refreshKey={inviteKey} />
 
       {loading ? (
         <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>

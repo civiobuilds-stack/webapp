@@ -151,6 +151,26 @@ def otp_email_html(name: str, code: str) -> str:
     )
 
 
+def invite_email_html(name: str, company: str, inviter: str, role: str, link: str) -> str:
+    return (
+        f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px">'
+        f'<tr><td align="center"><table role="presentation" width="520" style="background:#ffffff;'
+        f'border-radius:14px;overflow:hidden;{_BASE}">'
+        f'<tr><td style="background:#0D1B3E;padding:20px 28px;color:#fff;font-size:20px;'
+        f'font-weight:bold;letter-spacing:1px">CIVIO</td></tr>'
+        f'<tr><td style="padding:28px">'
+        f'<p style="margin:0 0 10px">Hi {escape(name)},</p>'
+        f'<p style="margin:0 0 18px">{escape(inviter)} has invited you to join <strong>{escape(company)}</strong> '
+        f'on CIVIO as a <strong>{escape(role)}</strong>.</p>'
+        f'<p style="margin:0 0 22px"><a href="{escape(link)}" style="display:inline-block;background:#1E6BFF;color:#ffffff;'
+        f'text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:999px">Accept invitation</a></p>'
+        f'<p style="margin:0;font-size:13px;color:#5C6460">This invitation link expires in 7 days. '
+        f'If you were not expecting it, you can ignore this email.</p>'
+        f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p>'
+        f'</td></tr></table></td></tr></table>'
+    )
+
+
 def report_email_html(name: str, project_name: str, report_title: str, revision: str) -> str:
     return (
         f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px">'

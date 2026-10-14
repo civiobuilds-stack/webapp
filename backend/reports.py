@@ -6,6 +6,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage,
 )
@@ -49,20 +50,37 @@ def _styles():
     return s
 
 
-def _header_footer(canvas, doc, meta):
+def _header_footer(canvas, doc, meta, brand=None):
+    brand = brand or {"name": "CIVIO", "tagline": "Project Management Consultancy"}
     canvas.saveState()
     w, h = A4
     # Header band
     canvas.setFillColor(FOREST)
     canvas.rect(0, h - 26 * mm, w, 26 * mm, fill=1, stroke=0)
-    canvas.setFillColor(SAGE)
-    canvas.rect(15 * mm, h - 20 * mm, 9 * mm, 9 * mm, fill=1, stroke=0)
+    text_x = 27 * mm
+    logo_drawn = False
+    if brand.get("logo"):
+        try:
+            canvas.setFillColor(colors.white)
+            canvas.roundRect(13 * mm, h - 22 * mm, 18 * mm, 18 * mm, 2 * mm, fill=1, stroke=0)
+            canvas.drawImage(ImageReader(io.BytesIO(brand["logo"])), 14 * mm, h - 21 * mm, 16 * mm, 16 * mm,
+                             preserveAspectRatio=True, anchor="c", mask="auto")
+            text_x = 35 * mm
+            logo_drawn = True
+        except Exception:
+            logo_drawn = False
+    if not logo_drawn:
+        canvas.setFillColor(SAGE)
+        canvas.rect(15 * mm, h - 20 * mm, 9 * mm, 9 * mm, fill=1, stroke=0)
     canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica-Bold", 15)
-    canvas.drawString(27 * mm, h - 17 * mm, "CIVIO")
+    canvas.drawString(text_x, h - 15.5 * mm, brand["name"][:40])
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#B7C9BF"))
-    canvas.drawString(27 * mm, h - 21 * mm, "Project Management Consultancy")
+    canvas.drawString(text_x, h - 19.5 * mm, brand.get("tagline", "")[:70])
+    if brand.get("contact"):
+        canvas.drawString(text_x, h - 23 * mm, brand["contact"][:90])
+    canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica", 8)
     canvas.drawRightString(w - 15 * mm, h - 15 * mm, meta.get("title", ""))
     canvas.drawRightString(w - 15 * mm, h - 19 * mm, meta.get("code", ""))
@@ -72,8 +90,10 @@ def _header_footer(canvas, doc, meta):
     canvas.setFillColor(MUTED)
     canvas.setFont("Helvetica", 7.5)
     canvas.drawString(15 * mm, 10 * mm, f"Generated {meta.get('generated', '')}  •  Rev {meta.get('revision', '')}")
-    canvas.drawCentredString(w / 2, 10 * mm, meta.get("confidential", "Confidential — Civio PMC"))
+    canvas.drawCentredString(w / 2, 10 * mm, meta.get("confidential", "Confidential"))
     canvas.drawRightString(w - 15 * mm, 10 * mm, f"Page {doc.page}")
+    canvas.setFont("Helvetica", 6.5)
+    canvas.drawCentredString(w / 2, 6.5 * mm, "Powered by CIVIO")
     canvas.restoreState()
 
 
@@ -114,6 +134,8 @@ def _photo_row(photos, styles):
     batch = []
     for b, cap, dt in photos:
         try:
+            from PIL import Image as PILImage
+            PILImage.open(io.BytesIO(b)).load()
             img = RLImage(io.BytesIO(b), width=cell_w - 4 * mm, height=img_h)
             img._restrictSize(cell_w - 4 * mm, img_h)
         except Exception:
@@ -223,7 +245,7 @@ def build_report(report_type, ctx):
         story.append(sign)
 
     def on_page(canvas, d):
-        _header_footer(canvas, d, meta)
+        _header_footer(canvas, d, meta, ctx.get("brand"))
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     buf.seek(0)

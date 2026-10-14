@@ -21,6 +21,7 @@ import seed as seed_module
 import reports as reports_module
 import emailer
 import csv
+import asyncio
 import io
 import secrets
 import httpx
@@ -36,6 +37,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("civio")
 
 MANAGER_ROLES = {"admin", "project_manager"}
+ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "site_engineer": "Site Engineer", "client": "Client"}
 DEFAULT_ENTERPRISE_ID = "civio"
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
@@ -436,6 +438,28 @@ class SubscriptionIn(BaseModel):
     billing_status: str = "manual"
 
 
+class InviteIn(BaseModel):
+    name: str = Field(min_length=1)
+    email: EmailStr
+    role: str
+    phone: Optional[str] = None
+
+
+class InviteAcceptIn(BaseModel):
+    password: str = Field(min_length=6)
+    phone: str = Field(min_length=6)
+    name: Optional[str] = None
+
+
+class EnterpriseSettingsIn(BaseModel):
+    display_name: str = Field(min_length=2)
+    tagline: str = ""
+    address: str = ""
+    contact_email: str = ""
+    contact_phone: str = ""
+    website: str = ""
+
+
 class PlanIn(BaseModel):
     name: str
     price_monthly: float = Field(ge=0)
@@ -456,6 +480,7 @@ def public_enterprise(e: Optional[dict]) -> Optional[dict]:
     bt = e.get("business_type", "commercial")
     return {"id": e["id"], "name": e["name"], "business_type": bt, "status": e.get("status"),
             "status_reason": e.get("status_reason"), "plan_id": e.get("plan_id"),
+            "display_name": e.get("display_name") or e["name"], "has_logo": bool(e.get("logo_path")),
             "modules": sorted(MODULES.get(bt, ALL_MODULES))}
 
 
@@ -1444,12 +1469,13 @@ async def _build_report_ctx(project, rtype, body, user):
     photo_ids = photo_ids[:9]
     photo_docs = await db.files.find({"id": {"$in": photo_ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
     photos = []
-    for pd in photo_docs:
-        try:
-            raw, _ = storage.get_object(pd["storage_path"])
-            photos.append((raw, pd.get("caption") or pd.get("original_filename"), pd.get("created_at")))
-        except Exception as e:
-            logger.error(f"report photo fetch failed: {e}")
+    fetched = await asyncio.gather(*[asyncio.to_thread(storage.get_object, pd["storage_path"]) for pd in photo_docs],
+                                   return_exceptions=True)
+    for pd, res in zip(photo_docs, fetched):
+        if isinstance(res, Exception):
+            logger.error(f"report photo fetch failed: {res}")
+            continue
+        photos.append((res[0], pd.get("caption") or pd.get("original_filename"), pd.get("created_at")))
 
     cost = None
     if rtype in ("cost", "completion"):
@@ -1483,10 +1509,11 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
         "period_start": body.period_start, "period_end": body.period_end,
         "generated": datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"),
         "revision": revision, "recommendations": body.recommendations,
-        "confidential": "Confidential — Civio PMC",
+        "confidential": f"Confidential — {user['_enterprise'].get('display_name') or user['_enterprise']['name']}",
     }
     ctx = await _build_report_ctx(project, body.type, body, user)
     ctx["meta"] = meta
+    ctx["brand"] = report_brand(user["_enterprise"])
     pdf_bytes = reports_module.build_report(body.type, ctx)
     rid = new_id()
     path = f"{storage.APP_NAME}/reports/{project_id}/{rid}.pdf"
@@ -1506,21 +1533,22 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
     # Notify + email client and assigned engineers with the PDF attached.
     recipient_ids = list(filter(None, [project.get("client_id")] + project.get("engineer_ids", [])))
     recipients = await db.users.find({"id": {"$in": recipient_ids}}, {"_id": 0}).to_list(100)
-    emailed = []
     attachment = emailer.pdf_attachment(f"{titles[body.type].replace(' ', '_')}_{revision}.pdf", pdf_bytes)
     for r in recipients:
         await notify(r["id"], "report", f"A new report was published: {titles[body.type]}.", project_id)
-        if r.get("email"):
-            mid = await emailer.send_email(
+    mailable = [r for r in recipients if r.get("email")]
+
+    async def _send_all():
+        for r in mailable:
+            await emailer.send_email(
                 to=r["email"],
                 subject=f"{titles[body.type]} — {project.get('name', 'CIVIO project')}",
                 html=emailer.report_email_html(r["name"], project.get("name", ""), titles[body.type], revision),
                 attachments=[attachment],
             )
-            if mid:
-                emailed.append(r["email"])
+    asyncio.create_task(_send_all())
     doc.pop("_id", None)
-    doc["emailed_to"] = emailed
+    doc["emailed_to"] = [r["email"] for r in mailable]
     return doc
 
 
@@ -1557,6 +1585,184 @@ async def export_audit_csv(project_id: str, request: Request, auth: str = Query(
     fname = f"civio_audit_{project.get('code', 'project')}_{stamp}.csv"
     return Response(content=out.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+# ---------------------------------------------------------------------------
+# Team invites
+# ---------------------------------------------------------------------------
+INVITE_TTL_DAYS = 7
+
+
+def _hash_token(t: str) -> str:
+    import hashlib
+    return hashlib.sha256(t.encode()).hexdigest()
+
+
+def public_invite(i: dict) -> dict:
+    return {k: i.get(k) for k in ("id", "name", "email", "role", "phone", "status", "invited_by_name", "created_at", "expires_at", "accepted_at")}
+
+
+@api_router.get("/invites")
+async def list_invites(user: dict = Depends(require_roles("admin", "project_manager"))):
+    items = await db.invites.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    now = now_iso()
+    for i in items:
+        if i["status"] == "pending" and i["expires_at"] < now:
+            i["status"] = "expired"
+    return [public_invite(i) for i in items]
+
+
+@api_router.post("/invites")
+async def create_invite(body: InviteIn, request: Request, user: dict = Depends(require_roles("admin", "project_manager"))):
+    if body.role not in {"site_engineer", "client", "project_manager"}:
+        raise HTTPException(status_code=400, detail="Invalid role.")
+    if body.role == "project_manager" and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only an admin can invite project managers.")
+    email = body.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if not origin.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Invites must be sent from the secure CIVIO web app.")
+    await enforce_limit(user, "users")
+    await db.invites.update_many({"company_id": user["company_id"], "email": email, "status": "pending"},
+                                 {"$set": {"status": "revoked"}})
+    token = secrets.token_urlsafe(32)
+    ts = datetime.now(timezone.utc)
+    doc = {
+        "id": new_id(), "token_hash": _hash_token(token), "company_id": user["company_id"],
+        "name": body.name, "email": email, "role": body.role, "phone": body.phone, "status": "pending",
+        "invited_by": user["id"], "invited_by_name": user["name"], "created_at": ts.isoformat(),
+        "expires_at": (ts + timedelta(days=INVITE_TTL_DAYS)).isoformat(), "accepted_at": None,
+    }
+    await db.invites.insert_one(doc)
+    link = f"{origin}/invite/{token}"
+    ent = user["_enterprise"]
+    mid = await emailer.send_email(
+        to=email, subject=f"You're invited to join {ent.get('display_name') or ent['name']} on CIVIO",
+        html=emailer.invite_email_html(body.name, ent.get("display_name") or ent["name"], user["name"],
+                                       ROLE_NAMES.get(body.role, body.role), link),
+    )
+    out = public_invite(doc)
+    out["invite_link"] = link
+    out["emailed"] = bool(mid)
+    return out
+
+
+@api_router.delete("/invites/{invite_id}")
+async def revoke_invite(invite_id: str, user: dict = Depends(require_roles("admin", "project_manager"))):
+    res = await db.invites.update_one({"id": invite_id, "company_id": user["company_id"], "status": "pending"},
+                                      {"$set": {"status": "revoked"}})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return {"ok": True}
+
+
+async def _load_invite(token: str) -> tuple:
+    inv = await db.invites.find_one({"token_hash": _hash_token(token)}, {"_id": 0})
+    if not inv or inv["status"] != "pending" or inv["expires_at"] < now_iso():
+        raise HTTPException(status_code=404, detail="This invite link is invalid or has expired.")
+    ent = await db.enterprises.find_one({"id": inv["company_id"]}, {"_id": 0})
+    if not ent or ent.get("status") != "active":
+        raise HTTPException(status_code=404, detail="This invite link is invalid or has expired.")
+    return inv, ent
+
+
+@api_router.get("/invites/token/{token}")
+async def invite_info(token: str):
+    inv, ent = await _load_invite(token)
+    return {"name": inv["name"], "email": inv["email"], "role": inv["role"], "phone": inv.get("phone"),
+            "company": ent.get("display_name") or ent["name"], "business_type": ent.get("business_type")}
+
+
+@api_router.post("/invites/token/{token}/accept")
+async def accept_invite(token: str, body: InviteAcceptIn, response: Response):
+    inv, ent = await _load_invite(token)
+    if await db.users.find_one({"email": inv["email"]}):
+        raise HTTPException(status_code=400, detail="An account with this email already exists. Please sign in.")
+    await enforce_limit({"company_id": ent["id"], "_enterprise": ent}, "users")
+    uid = new_id()
+    doc = {
+        "id": uid, "email": inv["email"], "password_hash": hash_password(body.password),
+        "name": (body.name or inv["name"]).strip(), "role": inv["role"], "phone": body.phone,
+        "company_id": ent["id"], "is_active": True, "is_demo": False, "email_verified": True,
+        "invited_by": inv["invited_by"], "created_at": now_iso(),
+    }
+    await db.users.insert_one(doc)
+    await db.invites.update_one({"id": inv["id"]}, {"$set": {"status": "accepted", "accepted_at": now_iso(), "user_id": uid}})
+    await notify(inv["invited_by"], "invite", f"{doc['name']} accepted your invite and joined as {ROLE_NAMES.get(inv['role'])}.", link="/people")
+    token_out = create_access_token(uid, inv["email"], inv["role"])
+    set_auth_cookie(response, token_out)
+    return {"access_token": token_out, "user": public_user(doc)}
+
+
+# ---------------------------------------------------------------------------
+# Company settings & branding
+# ---------------------------------------------------------------------------
+BRAND_FIELDS = ("display_name", "tagline", "address", "contact_email", "contact_phone", "website")
+
+
+@api_router.get("/enterprise/settings")
+async def get_enterprise_settings(user: dict = Depends(get_current_user)):
+    ent = user["_enterprise"]
+    out = {k: ent.get(k) or "" for k in BRAND_FIELDS}
+    out["display_name"] = ent.get("display_name") or ent["name"]
+    out.update({"name": ent["name"], "business_type": ent.get("business_type"), "has_logo": bool(ent.get("logo_path"))})
+    return out
+
+
+@api_router.put("/enterprise/settings")
+async def update_enterprise_settings(body: EnterpriseSettingsIn, user: dict = Depends(require_roles("admin"))):
+    data = {k: v.strip() for k, v in body.model_dump().items()}
+    await db.enterprises.update_one({"id": user["company_id"]}, {"$set": data})
+    return {"ok": True, **data}
+
+
+@api_router.post("/enterprise/logo")
+async def upload_logo(file: UploadFile = File(...), user: dict = Depends(require_roles("admin"))):
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in {"png", "jpg", "jpeg"}:
+        raise HTTPException(status_code=400, detail="Logo must be a PNG or JPG image.")
+    data = await file.read()
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Logo must be under 2 MB.")
+    path = f"{storage.APP_NAME}/branding/{user['company_id']}/{new_id()}.{ext}"
+    try:
+        result = storage.put_object(path, data, storage.MIME_TYPES[ext])
+    except Exception as e:
+        logger.error(f"logo upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Logo upload failed. Please try again.")
+    await db.enterprises.update_one({"id": user["company_id"]}, {"$set": {"logo_path": result["path"], "logo_type": storage.MIME_TYPES[ext]}})
+    return {"ok": True, "has_logo": True}
+
+
+@api_router.delete("/enterprise/logo")
+async def delete_logo(user: dict = Depends(require_roles("admin"))):
+    await db.enterprises.update_one({"id": user["company_id"]}, {"$unset": {"logo_path": "", "logo_type": ""}})
+    return {"ok": True, "has_logo": False}
+
+
+@api_router.get("/enterprise/logo")
+async def get_logo(request: Request, auth: str = Query(None)):
+    user = await user_from_query_token(request, auth)
+    ent = user["_enterprise"]
+    if not ent.get("logo_path"):
+        raise HTTPException(status_code=404, detail="No logo")
+    data, ctype = storage.get_object(ent["logo_path"])
+    return Response(content=data, media_type=ent.get("logo_type") or ctype, headers={"Cache-Control": "private, max-age=300"})
+
+
+def report_brand(ent: dict) -> dict:
+    logo = None
+    if ent.get("logo_path"):
+        try:
+            logo, _ = storage.get_object(ent["logo_path"])
+        except Exception as e:
+            logger.error(f"report logo fetch failed: {e}")
+    name = ent.get("display_name") or ent["name"]
+    contact = " · ".join(filter(None, [ent.get("contact_email"), ent.get("contact_phone"), ent.get("website")]))
+    return {"name": name, "tagline": ent.get("tagline") or "Construction Project Management",
+            "logo": logo, "contact": contact, "address": ent.get("address") or ""}
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings } from "lucide-react";
+import { API, getToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -17,6 +18,7 @@ const NAV = [
   { to: "/projects", label: "Projects", icon: FolderKanban, testid: "nav-projects" },
   { to: "/people", label: "People", icon: Users, testid: "nav-people", managerOnly: true },
   { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
+  { to: "/settings", label: "Company Settings", icon: Settings, testid: "nav-settings", adminOnly: true },
 ];
 
 export function AppShell({ children }) {
@@ -39,12 +41,15 @@ export function AppShell({ children }) {
   const NavLinks = ({ onClick }) => (
     <nav className="flex flex-col gap-1">
       {user?.enterprise && (
-        <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2" data-testid="workspace-badge">
-          <div className="truncate text-xs font-semibold text-white">{user.enterprise.name}</div>
-          <div className="text-[10px] uppercase tracking-widest text-white/50">{user.enterprise.business_type} workspace</div>
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2" data-testid="workspace-badge">
+          {user.enterprise.has_logo && <img src={`${API}/enterprise/logo?auth=${getToken()}`} alt="" className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-0.5" data-testid="workspace-logo" />}
+          <div className="min-w-0">
+            <div className="truncate text-xs font-semibold text-white">{user.enterprise.display_name || user.enterprise.name}</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50">{user.enterprise.business_type} workspace</div>
+          </div>
         </div>
       )}
-      {nav.filter((n) => !n.managerOnly || manager).map((n) => {
+      {nav.filter((n) => (!n.managerOnly || manager) && (!n.adminOnly || user?.role === "admin")).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (
           <Link key={n.to} to={n.to} onClick={onClick} data-testid={n.testid}

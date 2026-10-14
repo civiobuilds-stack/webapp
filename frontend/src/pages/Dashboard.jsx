@@ -8,13 +8,20 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlanUsageCard } from "@/components/PlanUsageCard";
+import HomeownerDashboard from "@/pages/homeowner/HomeownerDashboard";
 import {
   FolderKanban, ClipboardCheck, AlertTriangle, Bell, TrendingUp, ArrowRight, HardHat, Building2,
 } from "lucide-react";
 
 const ICONS = { projects: FolderKanban, pending_reviews: ClipboardCheck, pending_client_decisions: ClipboardCheck, open_defects: AlertTriangle, unread_notifications: Bell };
 
-export default function Dashboard() {
+export default function DashboardRoute() {
+  const { user } = useAuth();
+  if (user.role === "client" && user.enterprise?.business_type === "residential") return <HomeownerDashboard />;
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
