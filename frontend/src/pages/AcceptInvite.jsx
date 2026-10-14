@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Building2, XCircle } from "lucide-react";
+import { BrandLoader } from "@/components/BrandLoader";
 
 export default function AcceptInvite() {
   const { token } = useParams();
@@ -37,7 +38,7 @@ export default function AcceptInvite() {
     finally { setBusy(false); }
   };
 
-  if (!info) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (!info) return <BrandLoader />;
   if (info.invalid) return (
     <div className="flex min-h-screen items-center justify-center p-6" data-testid="invite-invalid">
       <div className="max-w-sm text-center"><XCircle className="mx-auto h-10 w-10 text-rose-500" />

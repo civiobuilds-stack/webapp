@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { LogIn, LogOut, FileDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { LabourSection } from "@/pages/project/LabourSection";
+import { LabourCostPanel } from "@/pages/project/LabourCostPanel";
 
 const t = (v) => (v ? new Date(v).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—");
 const local = (v) => (v ? new Date(new Date(v).getTime() + 5.5 * 3600e3).toISOString().slice(0, 16) : "");
@@ -85,6 +86,7 @@ export function AttendanceTab({ project, userId, perms, manages }) {
         ))}
       </Card>
       <LabourSection project={project} perms={perms} manages={manages} month={month} />
+      {can(perms, "view") && <LabourCostPanel project={project} manages={manages} />}
       {fix && <CorrectDialog row={fix} onClose={() => setFix(null)} onDone={() => { setFix(null); load(); }} />}
     </div>
   );

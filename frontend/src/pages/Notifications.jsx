@@ -1,11 +1,11 @@
 import { PushCard } from "@/components/PushCard";
 import { useEffect, useState } from "react";
+import { BrandLoader } from "@/components/BrandLoader";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, CheckCheck, ClipboardCheck, AlertTriangle, UserPlus, FileCheck, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +39,7 @@ export default function Notifications() {
       <PushCard />
 
       {loading ? (
-        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
+        <BrandLoader fullScreen={false} />
       ) : items.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 p-12 text-center text-muted-foreground"><Bell className="h-8 w-8" />You're all caught up.</Card>
       ) : (

@@ -1,6 +1,7 @@
 """Civio-branded PDF report generation using reportlab."""
 import io
 from datetime import datetime
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -17,6 +18,7 @@ SAGE = colors.HexColor("#1E6BFF")
 BONE = colors.HexColor("#F8F9F6")
 CHARCOAL = colors.HexColor("#1F2421")
 MUTED = colors.HexColor("#5C6460")
+CIVIO_LOGO = (Path(__file__).parent / "assets" / "civio-icon.png").read_bytes()
 
 
 def _fmt_inr(v):
@@ -59,11 +61,11 @@ def _header_footer(canvas, doc, meta, brand=None):
     canvas.rect(0, h - 26 * mm, w, 26 * mm, fill=1, stroke=0)
     text_x = 27 * mm
     logo_drawn = False
-    if brand.get("logo"):
+    if brand.get("logo") or CIVIO_LOGO:
         try:
             canvas.setFillColor(colors.white)
             canvas.roundRect(13 * mm, h - 22 * mm, 18 * mm, 18 * mm, 2 * mm, fill=1, stroke=0)
-            canvas.drawImage(ImageReader(io.BytesIO(brand["logo"])), 14 * mm, h - 21 * mm, 16 * mm, 16 * mm,
+            canvas.drawImage(ImageReader(io.BytesIO(brand.get("logo") or CIVIO_LOGO)), 14 * mm, h - 21 * mm, 16 * mm, 16 * mm,
                              preserveAspectRatio=True, anchor="c", mask="auto")
             text_x = 35 * mm
             logo_drawn = True
@@ -207,6 +209,39 @@ def build_dpr(project, d, photos, meta, brand):
     if photos:
         s.append(Paragraph("Site Photographs", st["CivH2"]))
         s.extend(_photo_row(photos, st))
+
+    def on_page(canvas, dd):
+        _header_footer(canvas, dd, meta, brand)
+    doc.build(s, onFirstPage=on_page, onLaterPages=on_page)
+    return buf.getvalue()
+
+
+def build_labour_cost(projects, meta, brand):
+    buf = io.BytesIO()
+    st = _styles()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=32 * mm, bottomMargin=20 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    s = [Paragraph("Labour Cost Report", st["CivH1"]),
+         Paragraph(f"Month-to-date with last 7 days breakdown · {meta.get('code', '')}", st["CivMuted"])]
+    tot = lambda k: sum(p["mtd"][k] for p in projects)  # noqa: E731
+    s.append(Paragraph("Company Summary (month-to-date)", st["CivH2"]))
+    s.append(_data_table(["Project", "Mason-days", "Helper-days", "Mason cost", "Helper cost", "Total"],
+                         [[f"{p['project']['name']} ({p['project']['code']})", p["mtd"]["mason_days"], p["mtd"]["helper_days"],
+                           _fmt_inr(p["mtd"]["mason_cost"]), _fmt_inr(p["mtd"]["helper_cost"]), _fmt_inr(p["mtd"]["total"])] for p in projects]
+                         + [["<b>All projects</b>", tot("mason_days"), tot("helper_days"), _fmt_inr(tot("mason_cost")),
+                             _fmt_inr(tot("helper_cost")), f"<b>{_fmt_inr(tot('total'))}</b>"]],
+                         st, [60 * mm, 22 * mm, 22 * mm, 25 * mm, 25 * mm, 26 * mm]))
+    for p in projects:
+        r = p["rates"]
+        s.append(Paragraph(f"{p['project']['name']} · {p['project']['code']}", st["CivH2"]))
+        s.append(_kv_table([("Wage rates", f"Mason {_fmt_inr(r['mason_rate'])}/day · Helper {_fmt_inr(r['helper_rate'])}/day"),
+                            ("Month-to-date", f"{p['mtd']['mason_days']} mason-days · {p['mtd']['helper_days']} helper-days · {_fmt_inr(p['mtd']['total'])}"),
+                            ("Last 7 days", f"{p['week']['mason_days']} mason-days · {p['week']['helper_days']} helper-days · {_fmt_inr(p['week']['total'])}")], st))
+        s.append(Spacer(1, 4))
+        s.append(_data_table(["Date", "Masons", "Helpers", "Mason cost", "Helper cost", "Day total"],
+                             [[_fmt_date(d["date"]), d["mason_days"], d["helper_days"], _fmt_inr(d["mason_cost"]), _fmt_inr(d["helper_cost"]), _fmt_inr(d["total"])]
+                              for d in p["days"]], st, [34 * mm, 22 * mm, 22 * mm, 32 * mm, 32 * mm, 38 * mm]))
+    if not projects:
+        s.append(Paragraph("No active projects.", st["CivBody"]))
 
     def on_page(canvas, dd):
         _header_footer(canvas, dd, meta, brand)

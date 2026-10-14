@@ -51,11 +51,7 @@ export default function Login() {
       <div className="relative hidden flex-col justify-between overflow-hidden bg-[hsl(222_60%_11%)] p-12 lg:flex">
         <img src="https://images.unsplash.com/photo-1588543087280-2e13d9e5c391?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200"
           alt="site" className="absolute inset-0 h-full w-full object-cover opacity-20" />
-        <div className="relative flex items-center gap-3 text-white">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/95 p-1.5"><img src="/civio-icon.png" alt="CIVIO" className="h-full w-full object-contain" /></div>
-          <div><div className="font-heading text-2xl font-extrabold tracking-tight">CIVIO</div>
-            <div className="text-xs uppercase tracking-widest text-white/50">Your Build, Our Expertise</div></div>
-        </div>
+        <div className="relative w-fit rounded-2xl bg-white px-5 py-3" data-testid="login-brand-logo"><img src="/civio-logo.png" alt="CIVIO — Your Build, Our Expertise" className="h-16" /></div>
         <div className="relative text-white">
           <h1 className="font-heading text-4xl font-bold leading-tight">Construction project management, from initiation to handover.</h1>
           <p className="mt-4 max-w-md text-white/70">Connect project managers, site engineers and clients on one transparent, database-backed platform.</p>

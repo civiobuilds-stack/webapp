@@ -1923,6 +1923,8 @@ import commercial  # noqa: E402
 api_router.include_router(commercial.router)
 import store as store_module  # noqa: E402
 api_router.include_router(store_module.router)
+import labour_cost  # noqa: E402
+api_router.include_router(labour_cost.router)
 
 
 async def migrate_multitenant():
@@ -1957,6 +1959,8 @@ async def migrate_multitenant():
     await db.project_members.create_index([("project_id", 1), ("user_id", 1)], unique=True)
     await db.attendance.create_index([("project_id", 1), ("user_id", 1), ("date", 1)], unique=True)
     await db.digest_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
+    await db.labour_cost_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
+    await db.tool_reminders.create_index([("request_id", 1), ("date", 1)], unique=True)
     await db.push_subscriptions.create_index("endpoint", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.users.create_index([("company_id", 1), ("employee_id", 1)], unique=True,

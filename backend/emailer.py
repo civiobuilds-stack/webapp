@@ -228,3 +228,48 @@ def report_email_html(name: str, project_name: str, report_title: str, revision:
         f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p>'
         f'</td></tr></table></td></tr></table>'
     )
+
+
+def _inr(v):
+    return f"Rs {float(v):,.0f}"
+
+
+def labour_cost_email_html(name: str, company: str, projects: list) -> str:
+    rows = "".join(
+        f'<tr><td style="padding:8px;border-top:1px solid #eee">{escape(p["project"]["name"])}</td>'
+        f'<td style="padding:8px;border-top:1px solid #eee">{p["mtd"]["mason_days"]} / {p["mtd"]["helper_days"]}</td>'
+        f'<td style="padding:8px;border-top:1px solid #eee">{_inr(p["week"]["total"])}</td>'
+        f'<td style="padding:8px;border-top:1px solid #eee"><b>{_inr(p["mtd"]["total"])}</b></td></tr>' for p in projects)
+    total = sum(p["mtd"]["total"] for p in projects)
+    return (
+        f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px"><tr><td align="center">'
+        f'<table role="presentation" width="600" style="background:#ffffff;border-radius:14px;overflow:hidden;{_BASE}">'
+        f'<tr><td style="background:#0D1B3E;padding:20px 28px;color:#fff;font-size:20px;font-weight:bold">{escape(company)} · Labour cost report</td></tr>'
+        f'<tr><td style="padding:22px 28px"><p style="margin:0 0 14px">Hi {escape(name)}, here is this month\'s labour cost so far. '
+        f'Month-to-date total: <b style="color:#1E6BFF">{_inr(total)}</b>.</p>'
+        f'<table role="presentation" width="100%" style="font-size:13px;background:#eef3ff;border-radius:8px">'
+        f'<tr><th align="left" style="padding:8px">Project</th><th align="left" style="padding:8px">Mason / helper days (MTD)</th>'
+        f'<th align="left" style="padding:8px">Last 7 days</th><th align="left" style="padding:8px">Month-to-date</th></tr>'
+        f'{rows or "<tr><td style=padding:8px>No active projects.</td></tr>"}</table>'
+        f'<p style="margin:16px 0 0;font-size:13px">The full branded PDF with the daily breakdown is attached.</p>'
+        f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p></td></tr>'
+        f'</table></td></tr></table>'
+    )
+
+
+def tool_overdue_email_html(name: str, info: dict, is_cc: bool) -> str:
+    who = f"{escape(info['holder'])} has" if is_cc else "You have"
+    return (
+        f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px"><tr><td align="center">'
+        f'<table role="presentation" width="520" style="background:#ffffff;border-radius:14px;overflow:hidden;{_BASE}">'
+        f'<tr><td style="background:#0D1B3E;padding:20px 28px;color:#fff;font-size:20px;font-weight:bold;letter-spacing:1px">CIVIO</td></tr>'
+        f'<tr><td style="padding:28px"><p style="margin:0 0 10px">Hi {escape(name)},</p>'
+        f'<p style="margin:0 0 16px">{who} a tool that is past its expected return date.</p>'
+        f'<table role="presentation" width="100%" style="background:#fff4e5;border-radius:10px"><tr><td style="padding:16px 18px">'
+        f'<div style="font-size:16px;font-weight:bold;color:#0D1B3E">{info["qty"]} {escape(info["unit"])} · {escape(info["item"])}</div>'
+        f'<div style="font-size:13px;color:#B45309;margin-top:4px">Due {escape(info["due"])} · {info["days"]} day(s) overdue · {escape(info["project"])}</div>'
+        f'</td></tr></table>'
+        f'<p style="margin:18px 0 0;font-size:14px">Please return it to the project store or update the store in-charge.</p>'
+        f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p>'
+        f'</td></tr></table></td></tr></table>'
+    )

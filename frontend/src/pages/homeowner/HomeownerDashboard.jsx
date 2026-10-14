@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BrandLoader } from "@/components/BrandLoader";
 import { api, fileUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDate } from "@/lib/format";
 import { Home, CalendarDays, ArrowRight } from "lucide-react";
@@ -79,7 +79,7 @@ export default function HomeownerDashboard() {
   };
   useEffect(load, [pid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!projects || (pid && !d)) return <div className="space-y-4"><Skeleton className="h-48 rounded-2xl" /><Skeleton className="h-72 rounded-2xl" /></div>;
+  if (!projects || (pid && !d)) return <BrandLoader fullScreen={false} />;
   if (!pid) return (
     <Card className="p-10 text-center" data-testid="home-empty"><Home className="mx-auto h-10 w-10 text-primary" />
       <h1 className="mt-3 font-heading text-2xl font-bold">Welcome, {user.name.split(" ")[0]}</h1>

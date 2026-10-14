@@ -42,6 +42,8 @@ function RequestRow({ r, perms, setDlg, reload }) {
         <div className="text-xs text-muted-foreground">{r.requested_by_name} · need by {formatDate(r.required_date)}{r.kind === "tool" ? ` · return ${formatDate(r.expected_return)}` : ""} · issued {r.issued_qty}{r.kind === "tool" ? ` · returned ${r.returned_qty} · damaged ${r.damaged_qty} · lost ${r.lost_qty}` : ""}</div>
         {r.remarks && <div className="text-xs">{r.remarks}</div>}</div>
       <div className="flex items-center gap-1">
+        {r.kind === "tool" && ["issued", "partially_issued", "partially_returned"].includes(r.status) && r.expected_return && r.expected_return.slice(0, 10) < new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10)
+          && <Badge className="bg-amber-500 text-white" data-testid="store-overdue-badge">Overdue</Badge>}
         <Badge variant="outline" data-testid="store-request-status">{r.status.replace("_", " ")}</Badge>
         {can(perms, "approve") && r.status === "requested" && <>
           <Button size="sm" onClick={() => run(() => api.post(`/store/requests/${r.id}/decision`, { action: "approve" }), "Approved", reload)} data-testid="store-approve-btn"><Check className="h-4 w-4" /></Button>

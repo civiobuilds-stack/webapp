@@ -95,7 +95,7 @@ export function AppShell({ children }) {
       {/* Top bar (mobile) */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
         <button onClick={() => setMobileNav(true)} data-testid="mobile-menu-btn" className="text-foreground"><Menu className="h-6 w-6" /></button>
-        <div className="flex items-center gap-2"><img src="/civio-icon.png" alt="CIVIO" className="h-6 w-6" /><span className="font-heading font-bold tracking-tight">CIVIO</span></div>
+        <div className="rounded-lg bg-white px-2 py-0.5"><img src="/civio-logo.png" alt="CIVIO" className="h-8" data-testid="mobile-brand-logo" /></div>
         <button onClick={() => navigate("/notifications")} className="relative" data-testid="mobile-bell-btn">
           <Bell className="h-6 w-6" />
           {unread > 0 && <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-rose-500 text-[10px] font-bold text-white">{unread}</span>}
@@ -111,12 +111,8 @@ export function AppShell({ children }) {
 
 function Brand() {
   return (
-    <Link to="/" className="flex items-center gap-2.5" data-testid="brand-logo">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/95 p-1"><img src="/civio-icon.png" alt="CIVIO" className="h-full w-full object-contain" /></div>
-      <div className="leading-tight">
-        <div className="font-heading text-xl font-extrabold tracking-tight text-white">CIVIO</div>
-        <div className="text-[10px] font-medium uppercase tracking-widest text-white/50">Your Build, Our Expertise</div>
-      </div>
+    <Link to="/" className="block rounded-xl bg-white px-3 py-1.5 transition-transform duration-200 hover:scale-[1.02]" data-testid="brand-logo">
+      <img src="/civio-logo.png" alt="CIVIO — Your Build, Our Expertise" className="mx-auto h-14 object-contain" />
     </Link>
   );
 }

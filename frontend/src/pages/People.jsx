@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { BrandLoader } from "@/components/BrandLoader";
 import { api, apiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_LABEL, isManager } from "@/lib/format";
@@ -9,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { UserPlus, Loader2, HardHat, User, Briefcase, Copy, Check } from "lucide-react";
@@ -55,7 +55,7 @@ export default function People() {
       {(user.enterprise?.modules || []).includes("dpr") && <EmployeesPanel isAdmin={user.role === "admin"} refreshKey={users.length} />}
 
       {loading ? (
-        <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>
+        <BrandLoader fullScreen={false} />
       ) : (
         <div className="space-y-6">
           {groups.map((g) => {

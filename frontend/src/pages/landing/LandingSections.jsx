@@ -18,8 +18,7 @@ export function LandingNav() {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[hsl(222_60%_11%)]/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 md:px-8">
         <a href="#top" className="flex items-center gap-2.5" data-testid="landing-logo">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white p-1"><img src="/civio-icon.png" alt="CIVIO" className="h-full w-full object-contain" /></div>
-          <span className="font-heading text-xl font-extrabold tracking-tight text-white">CIVIO</span>
+          <span className="rounded-lg bg-white px-2 py-0.5"><img src="/civio-logo.png" alt="CIVIO" className="h-9" /></span>
         </a>
         <nav className="hidden items-center gap-7 text-sm text-white/70 md:flex">
           <a href="#about" className="transition-colors hover:text-white">About</a>

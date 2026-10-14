@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, Trash2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DigestSettingsCard } from "@/components/DigestSettingsCard";
+import { LabourCostSettings } from "@/components/LabourCostSettings";
+import { BrandLoader } from "@/components/BrandLoader";
 
 const FIELDS = [
   ["display_name", "Company name (shown on reports)"], ["tagline", "Tagline"], ["contact_email", "Contact email"],
@@ -54,7 +56,7 @@ export default function CompanySettings() {
   const [busy, setBusy] = useState(false);
   useEffect(() => { api.get("/enterprise/settings").then((r) => setS(r.data)); }, []);
   if (user.role !== "admin") return <Navigate to="/" replace />;
-  if (!s) return <Loader2 className="h-6 w-6 animate-spin text-primary" />;
+  if (!s) return <BrandLoader fullScreen={false} />;
   const refreshMe = () => api.get("/auth/me").then((r) => setUser(r.data));
   const save = async () => {
     setBusy(true);
@@ -71,7 +73,7 @@ export default function CompanySettings() {
         <div className="text-muted-foreground">Your brand on every report. <Badge variant="outline" className="ml-1 capitalize">{s.business_type} workspace</Badge></div>
       </div>
       <LogoCard hasLogo={s.has_logo} onChange={(v) => { setS({ ...s, has_logo: v }); refreshMe(); }} />
-      {s.business_type === "commercial" && <DigestSettingsCard />}
+      {s.business_type === "commercial" && <><DigestSettingsCard /><LabourCostSettings /></>}
       <Card className="space-y-4 p-6">
         <h3 className="font-heading font-bold">Company details</h3>
         <div className="grid gap-4 sm:grid-cols-2">

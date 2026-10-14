@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { BrandLoader } from "@/components/BrandLoader";
 import { DprTab } from "@/pages/project/DprTab";
 import { AttendanceTab } from "@/pages/project/AttendanceTab";
 import { MembersTab } from "@/pages/project/MembersTab";
@@ -10,7 +11,6 @@ import { formatINR, formatDate, isManager } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Calendar, IndianRupee, Flag } from "lucide-react";
 import { ActivitiesTab } from "@/pages/project/ActivitiesTab";
@@ -42,7 +42,7 @@ export default function ProjectDetail() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
-  if (loading) return <div className="space-y-4"><Skeleton className="h-10 w-48" /><Skeleton className="h-40 rounded-2xl" /><Skeleton className="h-80 rounded-2xl" /></div>;
+  if (loading) return <BrandLoader fullScreen={false} />;
   if (!project) return null;
 
   const manager = isManager(user.role);

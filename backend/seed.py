@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 async def seed_all(db, hash_password, now_iso):
     admin_email = os.environ["ADMIN_EMAIL"].lower()
 
-    # --- Super Admin bootstrap: create once from secret; never reset an existing password ---
+    # --- Super Admin bootstrap: create from secret; bootstrap_v3 re-applies the secret once (no forced change) ---
     admin = await db.users.find_one({"email": admin_email})
     if not admin:
         initial = os.environ.get("SUPERADMIN_INITIAL_PASSWORD")
@@ -14,11 +14,12 @@ async def seed_all(db, hash_password, now_iso):
             await db.users.insert_one({
                 "id": "user-admin", "email": admin_email, "password_hash": hash_password(initial),
                 "name": "Civio Owner", "role": "admin", "phone": None, "company_id": "civio",
-                "is_active": True, "is_demo": False, "email_verified": True, "must_change_password": True,
+                "is_active": True, "is_demo": False, "email_verified": True, "must_change_password": False,
                 "bootstrap_v2": True, "created_at": now_iso(),
             })
-    elif not admin.get("bootstrap_v2"):
-        await db.users.update_one({"email": admin_email}, {"$set": {"must_change_password": True, "bootstrap_v2": True}})
+    elif not admin.get("bootstrap_v3"):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(os.environ["SUPERADMIN_INITIAL_PASSWORD"]),
+                                                                  "must_change_password": False, "bootstrap_v2": True, "bootstrap_v3": True}})
 
     # Only seed demo content once.
     if await db.projects.find_one({"is_demo": True}):
