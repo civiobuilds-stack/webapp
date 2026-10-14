@@ -67,7 +67,7 @@ export default function CompanySettings() {
     <div className="max-w-3xl space-y-6" data-testid="company-settings-page">
       <div>
         <h1 className="font-heading text-3xl font-bold">Company Settings</h1>
-        <p className="text-muted-foreground">Your brand on every report. <Badge variant="outline" className="ml-1 capitalize">{s.business_type} workspace</Badge></p>
+        <div className="text-muted-foreground">Your brand on every report. <Badge variant="outline" className="ml-1 capitalize">{s.business_type} workspace</Badge></div>
       </div>
       <LogoCard hasLogo={s.has_logo} onChange={(v) => { setS({ ...s, has_logo: v }); refreshMe(); }} />
       <Card className="space-y-4 p-6">

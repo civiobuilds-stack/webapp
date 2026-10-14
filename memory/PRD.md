@@ -68,6 +68,14 @@ audit logs. Premium forest-green "CIVIO BUILD" design, mobile-first for engineer
 - PWA: manifest + service worker (installable).
 - Verified: 99/99 backend tests (incl. new `tests/test_multitenant_saas.py`), frontend flows 100%.
 
+## Implemented (2026-06, Stage 6 — Invites, Branding, Homeowner, Landing) ✅
+- Public landing page at "/" for visitors (what CIVIO is, features, Residential/Commercial workspaces, contact civiobuilds@gmail.com / +91 91080 98446, Sign in / Register). Logged-in users still land on their dashboard.
+- Team invites: admins and PMs invite by name/email/role → an email link to /invite/{token} (7 days, single use, hashed token) → the invitee sets a password and phone and joins the inviting company already verified (no OTP). The People page lists invites and lets you revoke them.
+- Company Settings (/settings, admin only): display name, tagline, contact email/phone, website, address, and a logo upload (PNG/JPG under 2 MB, object storage). The sidebar shows the logo and name. PDF reports use the company's name, logo and contact in the header, with "Confidential — {company}" and "Powered by CIVIO" in the footer.
+- Residential homeowner dashboard for clients: progress ring hero, big Approve / Request changes cards, a build timeline (milestones and phase progress), a site-team contact card (call/email), and latest photos.
+- Report emails now go out in the background, and photos are fetched in parallel (report generation went from about 60s to under 1s). Corrupt photos are skipped in PDFs.
+- Verified in iteration_6 (all backend and frontend checks passed).
+
 ## Backlog / remaining
 ### Next (SaaS)
 - Residential-specific modules/dashboard copy (homeowner timeline, simplified client view); per-enterprise branding on PDFs.

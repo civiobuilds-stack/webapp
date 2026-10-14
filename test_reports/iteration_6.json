@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration-6 full validation of the four new CIVIO features (team invites, company-branded reports, residential homeowner dashboard, public landing page). Added /app/backend/tests/test_new_features_iter6.py with 13 pytest tests — ALL PASS. Combined with the prior multi-tenant suite, 29/29 backend tests pass (test_multitenant_saas.py: 16/16, test_new_features_iter6.py: 13/13). Frontend verified via Playwright: landing-page served to anonymous users (desktop and 390px mobile), contact-email mailto href = mailto:civiobuilds@gmail.com, contact-phone tel href = tel:+919108098446, both landing-signin-btn and hero-register-btn navigate correctly, logged-in users are NOT shown the landing page; People -> invite-person-btn opens dialog, send-invite-btn returns invite-link + copy-invite-link-btn, invite-list shows invite-row + invite-status + revoke-invite-btn; opening /invite/{token} logged-out shows accept-invite-page with company 'CIVIO PMC', completing the form lands on the dashboard; /settings renders company-settings-page with all seven inputs + save-settings-btn + logo-file-input + logo-preview + workspace-badge; PM cannot see nav-settings. Branded PDF: generate_report returns in <15s and pypdf-extracted text contains the display_name 'CIVIO PMC', the footer 'Powered by CIVIO', and 'Confidential'. Homeowner flow: created a residential enterprise end-to-end (register-enterprise + email_verified + super-admin approve + create engineer+client + project + milestone + activity with requires_client_approval + progress-update + PM review -> pending_client_decision), logged in as the client and verified every documented data-testid (home-hero, home-progress-ring, home-progress-value, home-decision-card, home-approve-btn, home-request-changes-btn, home-timeline, home-milestone, home-phase, home-team-card, home-team-member, home-photos); 'Request changes' dialog submits home-decision-comment and the card is replaced by home-no-decisions. Commercial client (client@civio.build) STILL sees the old dashboard (stat-* cards), not the homeowner view. All TEST_ enterprises/users/invites/projects were cleaned up; civio enterprise doc restored to display_name='CIVIO PMC' with the pre-existing logo intact.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/invites", "issue": "Previously-revoked invite emails get stored lower-cased (server lowercases) so clients must compare lower-case; harmless but should be documented."},
+      {"endpoint": "POST /api/auth/register-enterprise", "issue": "Expects top-level 'name'/'email'/'phone' for the owner (not 'owner_name'/'owner_email'/'owner_phone'). Field naming is inconsistent with the rest of the enterprise payload — potential source of confusion for API consumers."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CompanySettings.jsx (line 70)", "issue": "React hydration warning: <Badge> renders a <div> which is nested inside a <p> (`<p>…<Badge/></p>`). Browser console shows: 'In HTML, <div> cannot be a descendant of <p>'. Not functionality-breaking but will trigger hydration mismatches in SSR and is invalid HTML. Suggest changing the parent <p> to a <span> or <div>.", "selector": "[data-testid=\"company-settings-page\"] p > div.inline-flex", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features_iter6.py",
+    "/app/test_reports/pytest/iter6.xml"
+  ],
+  "action_items": [
+    "Fix the <Badge> inside <p> hydration warning in /app/frontend/src/pages/CompanySettings.jsx line 70 (change wrapper to <div> or <span>).",
+    "Consider renaming EnterpriseRegisterIn fields owner_name/owner_email/owner_phone for API clarity (currently 'name'/'email'/'phone' at top level alongside 'company_name').",
+    "Pre-existing legacy test files (test_authorization.py, test_civio_new_features.py) still have broken _register fixtures from iteration-4 (missing phone + email_verified) — carried over as debt."
+  ],
+  "critical_code_review_comments": [
+    "server.py now ~1934 lines — still well over the 700-line guideline. Invites, enterprise-settings/logo and super-admin blocks are all appended; splitting into routers would materially improve maintainability.",
+    "Invite acceptance (/invites/token/{token}/accept) correctly re-checks user-limit AND existing email, and immediately marks email_verified=True; token single-use is enforced by status flip to 'accepted' making subsequent GETs return 404 — verified.",
+    "POST /invites requires 'origin' header starting with https:// which browsers always send for the preview app, but direct API consumers (curl/postman) must set Origin header manually. Document this in README.",
+    "report_brand() reads logo from storage every time a report is generated. If logo_path is unset it still runs ent.get() — fine. If storage.get_object throws it logs but then uses no logo. Reasonable.",
+    "accept-invite-page does not re-check phone minimum length client-side beyond minLength=6, server enforces min_length=6. OK.",
+    "<p><Badge/></p> markup in CompanySettings.jsx should be <div> or <span> wrapper to avoid invalid HTML (hydration warning).",
+    "Homeowner dashboard’s useEffect probably polls or refetches summary on every project switch — not verified in detail but no issues observed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features_iter6.py (new, 13 tests, 13 pass)",
+    "/app/test_reports/pytest/iter6.xml (JUnit output)"
+  ],
+  "success_rate": {"backend": "100% (29/29: 13 new iter6 + 16 regression multitenant)", "frontend": "100% (landing desktop+mobile, admin invite UI, accept-invite page, company settings, homeowner dashboard with pending decision + request-changes dialog, commercial-client fallback)"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md: civiobuilds@gmail.com / CivioAdmin@2026 (super_admin + civio admin); pm@civio.build / CivioPM@2026; engineer@civio.build / CivioEng@2026; client@civio.build / CivioClient@2026. All verified working.",
+  "seed_data_creation": "Each run creates TEST_ invites, TEST_ residential enterprises + their owner/engineer/client/project/milestone/activity/progress-update. All deleted at module teardown and additionally wiped manually at the end of UI tests; final mongo state: 2 enterprises (civio + prior unrelated 'samvriddhi'), 0 TEST_ invites, 0 TEST_ users. civio display_name restored to 'CIVIO PMC'; its existing logo in storage was not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The invite / settings / homeowner / landing features are covered by /app/backend/tests/test_new_features_iter6.py. Key gotchas: (1) server LOWERCASES all emails on store — compare with email.lower(). (2) /auth/register-enterprise expects {name,email,phone} top-level, not owner_*. (3) OTP bypass: db.users.update_one({email:lower},{$set:{email_verified:True}}). (4) Progress update endpoint is POST /projects/{pid}/progress-updates (not /progress-updates). (5) ReviewIn uses 'action' not 'decision'. (6) PDF text is Flate+ASCII85-compressed — use pypdf to extract when asserting branding. (7) Invite POST requires an https:// Origin header. (8) Super-admin approval POST /superadmin/enterprises/{eid}/status with {status:'active',reason:''}. (9) Mongo DB is 'test_database' at mongodb://localhost:27017.",
+  "rca of the issue": "No open functional bugs in the new features. The only latent issue is the <Badge> inside <p> markup in CompanySettings — React logs a hydration warning but the UI still renders correctly. Minor API-naming inconsistency on register-enterprise is a cosmetic concern, not a bug."
+}
