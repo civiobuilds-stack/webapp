@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 9 tested Residential Phase 1 end to end against the public URL. Backend: 24/24 pytest tests passed (tests/test_residential_phase1_iter9.py), plus extra edge-case scripts. Covered: login with no OTP for users the owner creates; deactivate gives 403 on login and the old JWT gets 401; reset-password shows the temp password and it works; job edit; PM cannot manage the owner (403); team add/remove (removing the PM gives 400; a removed engineer loses access); soft delete of a throwaway project (wrong code 400, engineer 403, project gone from list, audit log kept); inspection auto-seed (18 stages / 76 items), pass/fail photo and remarks rules, client PUT 403, documents, inspection report roles (engineer 403; PM, owner and client 200; PDF download works); the full material-approval flow (engineer, PM, client; reject needs remarks; engineer cannot decide; client cannot see pending_pm items; notifications sent); residential BOQ and DPR (client sees approved DPRs only, cumulative BOQ applied, DPR PDF works); commercial regression (dpr, attendance, store, members, boq, inspection all 200; defects and material-approvals 403). Frontend (Playwright): People accounts panel (rows, login IDs, status, reset dialog, job edit, deactivate and reactivate), Add person dialog (job fields, 'no verification code' text), Team tab (add from company dropdown with job, team-job-title, remove, delete-project code gate and redirect), Inspection tab for engineer (fail with live-camera capture and upload, remarks, responsible person, summary updates, documents upload), PM and client dashboards' pending-materials card and dialogs (send to client, reject without remarks gives an error toast, approve), inspection report generation listed in the Reports tab, client DPR tab with only approved DPRs and the Generate DPR Report button, and commercial tabs (Inspection present, no Defects). Main issues: the project tab bar is broken on mobile; the client sees the BOQ add form; the homeowner dashboard says 'all caught up' while a material approval is waiting; there is no brute-force lockout on login.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force lockout: 7 wrong passwords in a row all return 401, then the correct password returns 200. The playbook requires lockout after 5 failed attempts."},
+      {"endpoint": "POST /api/users/{uid}/reset-password", "issue": "Works on deactivated accounts (returns 200 and a temp password). The UI hides the button, but the API should return 400 for inactive users."},
+      {"endpoint": "POST /api/users/{uid}/deactivate (_detach)", "issue": "_detach matches projects on 'team.user_id', including team entries already removed, so it writes a duplicate 'removed person from project' audit entry for projects the user had already left."},
+      {"endpoint": "POST /api/material-approvals/{id}/client", "issue": "The admin/owner can approve or reject on the client's behalf (require_roles('admin','client')), and the frontend shows Approve/Reject to admin on pending_client items. Confirm this is intended, since the spec says the client approves."},
+      {"endpoint": "GET /api/employees (commercial)", "issue": "project_count only counts project_members documents, so the PM and engineers assigned through project_manager_id/engineer_ids show '0 project(s)' in the Employee directory (e.g. Rajesh Nair, Anita on proj-demo-1)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProjectDetail TabsList (mobile 390px)", "issue": "The TabsList has shadcn's fixed h-9 plus 'flex-wrap'. On mobile the tabs wrap into 3 rows (scrollHeight 100 vs height 36), so only the first row (Overview/Activities/Progress) is visible. Inspection, DPR, Materials, Reports, Photos and Team are hidden unless you scroll inside a 36px box. Fix: use 'h-auto' with flex-wrap, or flex-nowrap with overflow-x-auto.", "selector": "[role=tablist]", "priority": "HIGH"},
+      {"component": "DprTab BoqPanel", "issue": "The BOQ add form (Code/Description/Unit/Approved qty inputs and the 'Add (PM)' button) is shown to the client and the engineer; the backend returns 403 for them. Show it only when the user manages the project (admin, or the PM of this project).", "selector": "[data-testid=boq-add-btn]", "priority": "MEDIUM"},
+      {"component": "Homeowner dashboard DecisionCards", "issue": "The 'You're all caught up — No approvals are waiting on you right now.' card shows at the same time as the 'Material requests awaiting decision (1)' card. The caught-up state should also count pending material approvals.", "selector": "[data-testid=pending-materials]", "priority": "MEDIUM"},
+      {"component": "MaterialApprovalsTab", "issue": "There is no loading state: items starts as [], so 'No material requests yet.' flashes before the data loads.", "selector": "[data-testid=materials-tab]", "priority": "LOW"},
+      {"component": "TeamTab AddPeopleDialog", "issue": "The dropdown lists people already on the project (the PM, the assigned engineer, the current client) and other clients even when the project already has one (picking one gives a backend 400). Filter out current members and disable clients when a client is already linked.", "selector": "[data-testid=add-people-select]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Rapid re-login (testing)", "issue": "The ingress/Cloudflare returned 429 on /api/auth/me after several fast logins; the backend logs show no 429, so this is environmental. The frontend leaves the /auth/me rejection unhandled, which opens the Emergent 'Unhandled rejection' overlay. Catch the error in the auth bootstrap.", "affected_selectors": []}
+    ],
+    "design_issues": [
+      {"screen": "Material request stepper", "issues": ["For rejected requests every step is grey; nothing shows the step where it was rejected (e.g. red on 'PM review' or 'Client approval')."]},
+      {"screen": "DPR list", "issues": ["The status badge shows the raw lowercase value ('approved') instead of a label."]},
+      {"screen": "Reports tab subtitle", "issues": ["Says 'Civio-branded PDFs' even though PDFs now use company branding; use neutral copy."]},
+      {"screen": "CameraCapture", "issues": ["A gallery upload is offered only when the camera fails. The user said gallery fallback is allowed for residential, so consider a 'Choose from gallery' button next to 'Take photo'. Also, the fallback input is never reset, so re-picking the same file after a failed upload does nothing."]},
+      {"screen": "Inspection report button", "issues": ["window.open is called after an await, so mobile Safari's popup blocker may block it. Consider navigating to the Reports tab, or opening a window synchronously first."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_residential_phase1_iter9.py", "/app/test_reports/pytest/pytest_iter9.xml"],
+  "action_items": [
+    "Fix the mobile project tab bar (TabsList h-9 + flex-wrap hides most tabs): use h-auto or a horizontal scroll with flex-nowrap",
+    "Hide the BOQ add form in DprTab unless the user manages the project",
+    "Homeowner dashboard: don't show 'You're all caught up' while material approvals are pending",
+    "Add a login brute-force lockout (5 failed attempts)",
+    "Return 400 from reset-password for deactivated users; don't write duplicate audit entries on deactivate for projects the user already left",
+    "Confirm whether the admin may approve material requests on the client's behalf",
+    "Optional: filter existing members out of the Add People dropdown; add loading states; show the rejected step in the stepper; fix /employees project_count"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2018 lines; split auth, users, projects and files into routers",
+    "residential.py and inspection.py are compact and follow the async Motor patterns, with _id excluded. Good.",
+    "inspection_report reads up to 30 photos from storage with asyncio.gather; fine, but consider thumbnails to keep the PDF small",
+    "Report download uses ?auth=<JWT> in the URL (the token can leak through history/logs); consider short-lived signed download tokens",
+    "PendingMaterials kindFor gives admin the 'client' decision on pending_client items; PMs only see a badge. Make sure this matches the business rules."
+  ],
+  "updated_files": ["/app/backend/tests/test_residential_phase1_iter9.py"],
+  "success_rate": {"backend": "100% (24/24 pytest + edge checks; 5 minor issues)", "frontend": "~90% (all requested flows work on desktop; mobile tab bar broken; BOQ form shown to the client; contradictory homeowner card)"},
+  "test_credentials": "From /app/memory/test_credentials.md plus the review request: owner/pm/engineer/client@civiohomes.build / CivioHome@2026; civiobuilds@gmail.com / Civio@123456. No demo passwords were changed; reset_superadmin.py was run at the end.",
+  "seed_data_creation": "Created test users test_site_engineer_58785c / test_client_58785c, TEST material approvals, a TEST BOQ item, a DPR dated 2025-01-01, TEST documents and 2 throwaway projects. All were removed from Mongo afterwards, and the 3 proj-res-1 inspection items I changed were reset to pending. Inspection report records (INS-01..05) and notifications were left in place. The pytest file creates users with a random stamp on each run; delete test_* users afterwards.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Residential tenant civio-homes (ids res-owner/res-pm/res-eng/res-client), project proj-res-1, code CH-001. Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_residential_phase1_iter9.py. In headless Chromium the camera works with a fake device: use camera-open-btn -> camera-snap-btn -> camera-upload-btn. The pending-mat-act-btn on dashboards opens the decide dialog in place (no navigation). Rapid repeated logins can trigger an ingress 429 on /auth/me. Retest the mobile tabs, the BOQ form visibility for client/engineer, and the homeowner caught-up card."
+}

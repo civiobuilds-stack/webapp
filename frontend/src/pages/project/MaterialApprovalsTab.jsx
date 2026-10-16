@@ -15,11 +15,12 @@ const STEPS = [["pending_pm", "Engineer request"], ["pending_client", "PM review
 const COLOR = { pending_pm: "bg-amber-500", pending_client: "bg-blue-600", approved: "bg-emerald-600", rejected: "bg-rose-600" };
 
 export function MatStepper({ m }) {
-  const idx = { pending_pm: 1, pending_client: 2, approved: 3, rejected: -1 }[m.status];
+  const idx = { pending_pm: 1, pending_client: 2, approved: 3, rejected: m.client_by ? 2 : 1 }[m.status];
+  const rej = m.status === "rejected";
   return (
     <div className="flex items-center gap-1 text-[11px]" data-testid="mat-stepper">
       {STEPS.map(([k, l], i) => <div key={k} className="flex items-center gap-1">
-        <span className={`rounded-full px-2 py-0.5 ${idx > i ? "bg-emerald-100 text-emerald-800" : idx === i ? "bg-blue-100 font-semibold text-blue-800" : "bg-muted text-muted-foreground"}`}>{l}</span>
+        <span className={`rounded-full px-2 py-0.5 ${idx > i ? "bg-emerald-100 text-emerald-800" : idx === i ? (rej ? "bg-rose-100 font-semibold text-rose-800" : "bg-blue-100 font-semibold text-blue-800") : "bg-muted text-muted-foreground"}`}>{l}</span>
         {i < STEPS.length - 1 && <span className="text-muted-foreground">›</span>}</div>)}
     </div>
   );
@@ -62,9 +63,9 @@ function NewDialog({ pid, onClose, onDone }) {
 }
 
 export function MaterialApprovalsTab({ project, role, userId }) {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(null);
   const [dlg, setDlg] = useState(null);
-  const load = () => api.get(`/projects/${project.id}/material-approvals`).then((r) => setItems(r.data)).catch(() => {});
+  const load = () => api.get(`/projects/${project.id}/material-approvals`).then((r) => setItems(r.data)).catch(() => setItems([]));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [project.id]);
   const mgr = role === "admin" || role === "project_manager";
   const isClient = role === "client" ? project.client_id === userId : role === "admin";
@@ -74,7 +75,7 @@ export function MaterialApprovalsTab({ project, role, userId }) {
       <div className="flex items-center justify-between"><div><h3 className="font-heading text-lg font-semibold">Material requests</h3>
         <p className="text-sm text-muted-foreground">Engineer requests → PM reviews → Client approves. No costing or purchasing.</p></div>
         {role !== "client" && <Button onClick={() => setDlg({ type: "new" })} data-testid="new-mat-btn"><Plus className="h-4 w-4" /> New request</Button>}</div>
-      {items.length === 0 ? <Card className="p-10 text-center text-muted-foreground"><Package className="mx-auto mb-2 h-8 w-8" />No material requests yet.</Card> : items.map((m) => (
+      {items === null ? null : items.length === 0 ? <Card className="p-10 text-center text-muted-foreground"><Package className="mx-auto mb-2 h-8 w-8" />No material requests yet.</Card> : items.map((m) => (
         <Card key={m.id} className="space-y-2 p-4" data-testid="mat-row">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div><div className="font-medium">{m.quantity} {m.unit} · {m.item}</div>
@@ -93,10 +94,10 @@ export function MaterialApprovalsTab({ project, role, userId }) {
   );
 }
 
-export function PendingMaterials({ role }) {
+export function PendingMaterials({ role, onCount }) {
   const [items, setItems] = useState([]);
   const [dlg, setDlg] = useState(null);
-  const load = () => api.get("/material-approvals/pending").then((r) => setItems(r.data)).catch(() => {});
+  const load = () => api.get("/material-approvals/pending").then((r) => { setItems(r.data); onCount?.(r.data.filter((m) => m.status === "pending_client").length); }).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!items.length) return null;
   const kindFor = (m) => (m.status === "pending_pm" ? (role === "client" ? null : "pm") : (role === "client" || role === "admin" ? "client" : null));

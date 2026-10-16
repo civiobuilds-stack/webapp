@@ -63,7 +63,7 @@ function AddPeopleDialog({ project, reload }) {
   const [busy, setBusy] = useState(false);
   const [people, setPeople] = useState([]);
   const [f, setF] = useState({ user_id: "", job_title: "", job_description: "" });
-  useEffect(() => { if (open) api.get("/users").then((r) => setPeople(r.data.filter((u) => u.is_active !== false && u.role !== "admin"))).catch(() => {}); }, [open]);
+  useEffect(() => { if (open) api.get("/users").then((r) => setPeople(r.data.filter((u) => u.is_active !== false && u.role !== "admin" && u.id !== project.project_manager_id && u.id !== project.client_id && !(project.engineer_ids || []).includes(u.id) && !(u.role === "client" && project.client_id)))).catch(() => {}); }, [open]);
   const pick = (id) => { const u = people.find((x) => x.id === id); setF({ user_id: id, job_title: u?.job_title || "", job_description: u?.job_description || "" }); };
   const save = async () => {
     setBusy(true);

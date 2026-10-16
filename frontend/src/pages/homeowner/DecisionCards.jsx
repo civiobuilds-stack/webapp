@@ -50,8 +50,9 @@ function DecisionCard({ u, onPick }) {
   );
 }
 
-export function DecisionCards({ updates, onDone }) {
+export function DecisionCards({ updates, onDone, otherPending = 0 }) {
   const [pick, setPick] = useState(null);
+  if (!updates.length && otherPending) return null;
   if (!updates.length) return (
     <Card className="flex items-center gap-3 p-5" data-testid="home-no-decisions"><PartyPopper className="h-6 w-6 text-emerald-600" />
       <div><div className="font-semibold">You're all caught up</div><div className="text-sm text-muted-foreground">No approvals are waiting on you right now.</div></div></Card>

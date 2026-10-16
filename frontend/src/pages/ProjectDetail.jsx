@@ -83,7 +83,7 @@ export default function ProjectDetail() {
       </Card>
 
       <Tabs defaultValue={searchParams.get("tab") || "overview"}>
-        <TabsList className="flex w-full flex-wrap justify-start gap-1 overflow-x-auto">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
           <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
@@ -107,7 +107,7 @@ export default function ProjectDetail() {
         <TabsContent value="activities" className="mt-5"><ActivitiesTab project={project} role={user.role} reload={load} /></TabsContent>
         <TabsContent value="progress" className="mt-5"><ProgressTab project={project} role={user.role} userId={user.id} /></TabsContent>
         {hasInspection && <TabsContent value="inspection" className="mt-5"><InspectionTab project={project} role={user.role} /></TabsContent>}
-        {resDpr && <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} initialDpr={searchParams.get("dpr")} /></TabsContent>}
+        {resDpr && <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} initialDpr={searchParams.get("dpr")} /></TabsContent>}
         {hasMaterials && <TabsContent value="materials" className="mt-5"><MaterialApprovalsTab project={project} role={user.role} userId={user.id} /></TabsContent>}
         {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
@@ -115,7 +115,7 @@ export default function ProjectDetail() {
         <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} /></TabsContent>
         {manager && <TabsContent value="audit" className="mt-5"><AuditTab project={project} /></TabsContent>}
         {commercial && perm && <>
-          <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} initialDpr={searchParams.get("dpr")} /></TabsContent>
+          <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} initialDpr={searchParams.get("dpr")} /></TabsContent>
           <TabsContent value="attendance" className="mt-5"><AttendanceTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} /></TabsContent>
           <TabsContent value="members" className="mt-5"><MembersTab project={project} meta={perm} /></TabsContent>
           <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} /></TabsContent>

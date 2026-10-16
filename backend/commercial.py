@@ -143,8 +143,14 @@ async def list_employees(user: dict = Depends(commercial_user)):
     users = await S.db.users.find({"company_id": user["company_id"], "role": {"$ne": "client"}, "is_active": {"$ne": False}},
                                   {"_id": 0, "password_hash": 0}).to_list(2000)
     counts = {}
-    async for m in S.db.project_members.find({"company_id": user["company_id"]}, {"_id": 0, "user_id": 1}):
-        counts[m["user_id"]] = counts.get(m["user_id"], 0) + 1
+    pids = {}
+    async for m in S.db.project_members.find({"company_id": user["company_id"]}, {"_id": 0, "user_id": 1, "project_id": 1}):
+        pids.setdefault(m["user_id"], set()).add(m["project_id"])
+    async for p in S.db.projects.find({"company_id": user["company_id"], "is_deleted": {"$ne": True}, "is_archived": {"$ne": True}}, {"_id": 0, "id": 1, "project_manager_id": 1, "engineer_ids": 1}):
+        for uid in [p.get("project_manager_id"), *p.get("engineer_ids", [])]:
+            if uid:
+                pids.setdefault(uid, set()).add(p["id"])
+    counts.update({k: len(v) for k, v in pids.items()})
     return [{**S.public_user(u), "project_count": counts.get(u["id"], 0)} for u in users]
 
 

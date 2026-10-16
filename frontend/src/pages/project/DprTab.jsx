@@ -35,7 +35,7 @@ function DprView({ dpr, perms, userId, onEdit, onChanged }) {
         <div><h3 className="font-heading text-lg font-bold">DPR · {formatDate(dpr.report_date)}</h3>
           <p className="text-xs text-muted-foreground">By {dpr.created_by_name}{dpr.weather ? ` · ${dpr.weather}` : ""}</p></div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className={DPR_STATUS[dpr.status]} data-testid="dpr-status">{dpr.status}</Badge>
+          <Badge variant="outline" className={DPR_STATUS[dpr.status]} data-testid="dpr-status">{dpr.status.charAt(0).toUpperCase() + dpr.status.slice(1)}</Badge>
           {editable && can(perms, "edit") && <Button size="sm" variant="outline" onClick={onEdit} data-testid="dpr-edit-btn"><Pencil className="h-4 w-4" /> Edit</Button>}
           {editable && can(perms, "submit") && <Button size="sm" onClick={() => act(() => api.post(`/dprs/${dpr.id}/submit`), "DPR submitted for review")} data-testid="dpr-submit-btn"><Send className="h-4 w-4" /> Submit</Button>}
           {dpr.status === "submitted" && can(perms, "approve") && dpr.created_by !== userId && <>
@@ -67,7 +67,7 @@ function DprView({ dpr, perms, userId, onEdit, onChanged }) {
   );
 }
 
-function BoqPanel({ project }) {
+function BoqPanel({ project, manages }) {
   const [items, setItems] = useState([]);
   const [f, setF] = useState({ code: "", description: "", unit: "", approved_qty: 0 });
   const load = () => api.get(`/projects/${project.id}/boq`).then((r) => setItems(r.data)).catch(() => {});
@@ -78,17 +78,17 @@ function BoqPanel({ project }) {
       <div className="font-semibold">Approved BOQ</div>
       {items.map((b) => <div key={b.id} className="flex flex-wrap justify-between gap-2 text-sm" data-testid="boq-row"><span><b>{b.code}</b> {b.description}</span>
         <span>{b.accepted_qty}/{b.approved_qty} {b.unit} · remaining {b.remaining_qty} · <b>{b.progress_pct}%</b></span></div>)}
-      <div className="flex flex-wrap gap-2 pt-2">
+      {manages && <div className="flex flex-wrap gap-2 pt-2">
         {[["code", "Code"], ["description", "Description"], ["unit", "Unit"], ["approved_qty", "Approved qty"]].map(([k, l]) => (
           <input key={k} className="h-9 min-w-[100px] flex-1 rounded-md border bg-background px-2 text-sm" placeholder={l} type={k === "approved_qty" ? "number" : "text"} value={f[k]}
             onChange={(e) => setF({ ...f, [k]: k === "approved_qty" ? Number(e.target.value) : e.target.value })} data-testid={`boq-${k}-input`} />))}
         <Button size="sm" onClick={add} data-testid="boq-add-btn">Add (PM)</Button>
-      </div>
+      </div>}
     </Card>
   );
 }
 
-export function DprTab({ project, userId, perms, initialDpr }) {
+export function DprTab({ project, userId, perms, manages, initialDpr }) {
   const [list, setList] = useState([]);
   const [sel, setSel] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -101,14 +101,14 @@ export function DprTab({ project, userId, perms, initialDpr }) {
     <div className="space-y-4" data-testid="dpr-tab">
       <div className="flex items-center justify-between"><h2 className="font-heading text-lg font-semibold">Daily Progress Reports</h2>
         {can(perms, "create") && <Button onClick={() => setEditing({})} data-testid="new-dpr-btn"><Plus className="h-4 w-4" /> New DPR</Button>}</div>
-      <BoqPanel project={project} />
+      <BoqPanel project={project} manages={manages} />
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         <Card className="divide-y">
           {list.length === 0 && <p className="p-4 text-sm text-muted-foreground">No DPRs yet.</p>}
           {list.map((d) => (
             <button key={d.id} onClick={() => open(d.id)} className={`flex w-full items-center justify-between p-3 text-left text-sm hover:bg-muted/50 ${sel?.id === d.id ? "bg-muted" : ""}`} data-testid="dpr-row">
               <span><span className="font-medium">{formatDate(d.report_date)}</span><span className="block text-xs text-muted-foreground">{d.created_by_name}</span></span>
-              <Badge variant="outline" className={DPR_STATUS[d.status]}>{d.status}</Badge>
+              <Badge variant="outline" className={DPR_STATUS[d.status]}>{d.status.charAt(0).toUpperCase() + d.status.slice(1)}</Badge>
             </button>
           ))}
         </Card>

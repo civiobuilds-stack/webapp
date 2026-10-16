@@ -618,11 +618,19 @@ async def resend_otp(body: OtpResendIn):
 
 
 @api_router.post("/auth/login")
-async def login(body: LoginIn, response: Response):
+async def login(body: LoginIn, request: Request, response: Response):
     email = body.email.lower()
+    ident = f"{request.headers.get('x-forwarded-for', request.client.host if request.client else '').split(',')[0].strip()}:{email}"
+    att = await db.login_attempts.find_one({"identifier": ident}, {"_id": 0})
+    if att and att.get("locked_until") and datetime.fromisoformat(att["locked_until"]) > datetime.now(timezone.utc):
+        raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
+        n = (att or {}).get("count", 0) + 1 if not (att or {}).get("locked_until") else 1
+        lock = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat() if n >= 5 else None
+        await db.login_attempts.update_one({"identifier": ident}, {"$set": {"count": n, "locked_until": lock, "updated_at": now_iso()}}, upsert=True)
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+    await db.login_attempts.delete_one({"identifier": ident})
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="This account has been deactivated. Contact your admin.")
     if user.get("email_verified") is False and user.get("role") != "admin":
@@ -1979,6 +1987,7 @@ async def migrate_multitenant():
     await db.project_members.create_index([("project_id", 1), ("user_id", 1)], unique=True)
     await db.attendance.create_index([("project_id", 1), ("user_id", 1), ("date", 1)], unique=True)
     await db.digest_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
+    await db.login_attempts.create_index("identifier")
     await db.labour_cost_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
     await db.tool_reminders.create_index([("request_id", 1), ("date", 1)], unique=True)
     await db.push_subscriptions.create_index("endpoint", unique=True)

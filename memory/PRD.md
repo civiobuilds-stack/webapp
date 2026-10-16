@@ -109,3 +109,14 @@ See `/app/memory/test_credentials.md`.
 
 ## Backlog
 - P1 Low stock alerts; P1 native mobile app; P2 payment gateway for subscriptions; P2 split server.py
+
+## Implemented (2026-06, Stage 9 — Residential Phase 1) ✅  (iteration_9: backend 24/24, frontend flows pass; follow-up fixes applied)
+- No OTP for employees/clients created by PM/Admin (owner self-registration still OTP). Login lockout: 5 fails / 15 min (login_attempts).
+- People page: Login accounts table (login ID, role/job, status, last login), edit job role/description, reset password (temp shown once, hash only), remove/reactivate (soft, history kept).
+- Team tab: Add People dropdown with project job role/description, remove with confirm; Delete project (type code; soft delete is_deleted).
+- Inspection Checklist replaces Defects in BOTH workspaces (inspection.py): 18 stages/76 items, pass/fail/NA, remarks, responsible, photos required for pass/fail, drawings/documents, Generate Inspection Report (PM/owner/client) -> reports collection.
+- Residential material approvals (residential.py): engineer -> PM -> client approve/reject with remarks, email+push, stage stepper, dashboard pending cards.
+- Residential DPR tab (module res_dpr) reusing commercial DPR; client sees approved only; Generate DPR Report auto-includes that day's site photos.
+- Residential demo tenant civio-homes (seed.py seed_residential).
+
+## Next: Phase 2 (Commercial hierarchy/roles incl. ASCO Manager & Pass Coordinator, company store workflow, DPR weekly targets) → Phase 3 (vehicles/drivers, safety, billing/QS docs, approval dashboard). User choices: camera-only for commercial required photos; push only for drivers (no SMS); passwords hash-only.

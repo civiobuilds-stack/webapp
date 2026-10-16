@@ -66,6 +66,8 @@ async def reset_password(uid: str, user: dict = Depends(managers)):
     t = await _target(uid, user)
     if t["id"] == user["id"]:
         raise HTTPException(status_code=400, detail="Use Change password for your own account.")
+    if t.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="Reactivate this account before resetting its password.")
     temp = f"Civio@{secrets.randbelow(900000) + 100000}"
     await S.db.users.update_one({"id": uid}, {"$set": {"password_hash": S.hash_password(temp), "password_reset_at": S.now_iso(),
                                                        "password_reset_by": user["id"], "email_verified": True}})
@@ -75,7 +77,7 @@ async def reset_password(uid: str, user: dict = Depends(managers)):
 
 
 async def _detach(uid, user, t):
-    async for p in S.db.projects.find({"company_id": user["company_id"], "$or": [{"engineer_ids": uid}, {"client_id": uid}, {"team.user_id": uid}]}, {"_id": 0}):
+    async for p in S.db.projects.find({"company_id": user["company_id"], "$or": [{"engineer_ids": uid}, {"client_id": uid}, {"team": {"$elemMatch": {"user_id": uid, "removed_at": None}}}]}, {"_id": 0}):
         await _remove_from_project(p, uid, user, t["name"])
     await S.db.project_members.delete_many({"user_id": uid, "company_id": user["company_id"]})
 

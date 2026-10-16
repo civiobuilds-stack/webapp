@@ -69,6 +69,7 @@ export default function HomeownerDashboard() {
   const [projects, setProjects] = useState(null);
   const [pid, setPid] = useState(null);
   const [d, setD] = useState(null);
+  const [matCount, setMatCount] = useState(0);
 
   useEffect(() => { api.get("/projects").then((r) => { setProjects(r.data); setPid(r.data[0]?.id || null); }); }, []);
   const load = () => {
@@ -96,8 +97,8 @@ export default function HomeownerDashboard() {
         </Select>
       )}
       <HomeHero project={d.project} />
-      <DecisionCards updates={pending} onDone={load} />
-      <PendingMaterials role="client" />
+      <DecisionCards updates={pending} onDone={load} otherPending={matCount} />
+      <PendingMaterials role="client" onCount={setMatCount} />
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <BuildTimeline milestones={d.milestones} activities={d.activities} />
         <TeamContactCard project={d.project} />

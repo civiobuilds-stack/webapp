@@ -31,7 +31,7 @@ export function ReportsTab({ project, role }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h3 className="font-heading text-lg font-semibold">Reports</h3>
-          <p className="text-sm text-muted-foreground">Civio-branded PDFs generated from live project data. Historical revisions are preserved.</p></div>
+          <p className="text-sm text-muted-foreground">Company-branded PDFs generated from live project data. Historical revisions are preserved.</p></div>
         {manager && <GenerateDialog projectId={project.id} onDone={load} />}
       </div>
 
