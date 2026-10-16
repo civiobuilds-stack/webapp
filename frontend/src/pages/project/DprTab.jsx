@@ -42,7 +42,7 @@ function DprView({ dpr, perms, userId, onEdit, onChanged }) {
             <Button size="sm" onClick={() => setReview("approve")} data-testid="dpr-approve-btn"><Check className="h-4 w-4" /> Approve</Button>
             <Button size="sm" variant="outline" onClick={() => setReview("return")} data-testid="dpr-return-btn"><RotateCcw className="h-4 w-4" /> Return</Button>
             <Button size="sm" variant="outline" onClick={() => setReview("reject")} data-testid="dpr-reject-btn"><X className="h-4 w-4" /> Reject</Button></>}
-          <a href={`${API}/dprs/${dpr.id}/pdf?auth=${getToken()}`} target="_blank" rel="noreferrer"><Button size="sm" variant="secondary" data-testid="dpr-pdf-btn"><FileDown className="h-4 w-4" /> PDF</Button></a>
+          <a href={`${API}/dprs/${dpr.id}/pdf?auth=${getToken()}`} target="_blank" rel="noreferrer"><Button size="sm" variant="secondary" data-testid="dpr-pdf-btn"><FileDown className="h-4 w-4" /> Generate DPR Report</Button></a>
         </div>
       </div>
       {dpr.review_comment && <p className="rounded-lg bg-muted p-3 text-sm" data-testid="dpr-review-comment"><b>Reviewer:</b> {dpr.review_comment}</p>}

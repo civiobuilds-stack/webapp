@@ -21,6 +21,7 @@ async def seed_all(db, hash_password, now_iso):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(os.environ["SUPERADMIN_INITIAL_PASSWORD"]),
                                                                   "must_change_password": False, "bootstrap_v2": True, "bootstrap_v3": True}})
 
+    await seed_residential(db, hash_password, now_iso)
     # Only seed demo content once.
     if await db.projects.find_one({"is_demo": True}):
         return
@@ -183,3 +184,30 @@ async def seed_all(db, hash_password, now_iso):
         "details": project["name"], "created_at": now_iso(),
     })
 
+
+
+async def seed_residential(db, hash_password, now_iso):
+    """Residential demo tenant (idempotent)."""
+    if await db.enterprises.find_one({"id": "civio-homes"}):
+        return
+    ts = now_iso()
+    await db.enterprises.insert_one({
+        "id": "civio-homes", "name": "CIVIO Homes Demo", "business_type": "residential", "city": "Pune", "status": "active",
+        "owner_id": "res-owner", "owner_email": "owner@civiohomes.build", "owner_name": "Arjun Rao", "plan_id": "starter",
+        "price_monthly": 2999, "billing_status": "manual", "limits": {"max_users": 15, "max_projects": 10, "max_storage_mb": 5120},
+        "created_at": ts, "approved_at": ts})
+    people = [("res-owner", "owner@civiohomes.build", "Arjun Rao (Owner)", "admin", "CivioHome@2026"),
+              ("res-pm", "pm@civiohomes.build", "Kavya Iyer (PM)", "project_manager", "CivioHome@2026"),
+              ("res-eng", "engineer@civiohomes.build", "Rohit Patil (Engineer)", "site_engineer", "CivioHome@2026"),
+              ("res-client", "client@civiohomes.build", "Sneha Joshi (Client)", "client", "CivioHome@2026")]
+    for uid, email, name, role, pwd in people:
+        if not await db.users.find_one({"email": email}):
+            await db.users.insert_one({"id": uid, "email": email, "password_hash": hash_password(pwd), "name": name, "role": role,
+                                       "phone": "+91 90000 00000", "company_id": "civio-homes", "is_active": True, "is_demo": True,
+                                       "email_verified": True, "created_at": ts})
+    await db.projects.insert_one({
+        "id": "proj-res-1", "company_id": "civio-homes", "code": "CH-001", "name": "Joshi Villa — Baner", "client_id": "res-client",
+        "address": "Survey 12, Baner, Pune 411045", "type": "Residential", "description": "Demo G+1 independent villa.",
+        "start_date": ts, "planned_completion_date": None, "status": "In Progress", "contract_value": 9500000,
+        "project_manager_id": "res-pm", "engineer_ids": ["res-eng"], "client_budget_visible": False, "progress_percent": 0,
+        "is_archived": False, "is_demo": True, "created_by": "res-owner", "created_at": ts})

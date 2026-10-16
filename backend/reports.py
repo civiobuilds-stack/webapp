@@ -216,6 +216,36 @@ def build_dpr(project, d, photos, meta, brand):
     return buf.getvalue()
 
 
+def build_inspection(project, stages, summary, docs, photos, meta, brand):
+    buf = io.BytesIO()
+    st = _styles()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=32 * mm, bottomMargin=20 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    label = {"pass": "PASS", "fail": "FAIL", "na": "N/A", "pending": "Pending"}
+    s = [Paragraph("Inspection Report", st["CivH1"]),
+         Paragraph(f"{project['name']}  ·  {project.get('code', '')}", st["CivH2"]),
+         _kv_table([("Project address", project.get("address") or "—"), ("Report date", datetime.now().strftime("%d %b %Y")),
+                    ("Prepared by", meta.get("prepared_by", "")),
+                    ("Summary", f"{summary['total']} items · {summary['pass']} pass · {summary['fail']} fail · {summary['na']} N/A · {summary['pending']} pending")], st)]
+    for g in stages:
+        done = [i for i in g["items"] if i["status"] != "pending"]
+        s.append(Paragraph(f"{g['stage']}  ({len(done)}/{len(g['items'])} inspected)", st["CivH2"]))
+        s.append(_data_table(["Checklist item", "Status", "Remarks", "Responsible", "Photos"],
+                             [[i["item"], label[i["status"]], i.get("remarks") or "—", i.get("responsible_name") or "—", len(i.get("photo_ids", []))] for i in g["items"]],
+                             st, [62 * mm, 18 * mm, 52 * mm, 30 * mm, 18 * mm]))
+    s.append(Paragraph("Drawings & Documents", st["CivH2"]))
+    s.append(_data_table(["Title", "Type", "File", "Added by", "Date"],
+                         [[d["title"], d["category"].title(), d["filename"], d.get("uploaded_by_name", ""), _fmt_date(d["created_at"])] for d in docs] or [["None on record", "", "", "", ""]],
+                         st, [55 * mm, 22 * mm, 45 * mm, 32 * mm, 26 * mm]))
+    if photos:
+        s.append(Paragraph("Inspection Photographs", st["CivH2"]))
+        s.extend(_photo_row(photos, st))
+
+    def on_page(canvas, dd):
+        _header_footer(canvas, dd, meta, brand)
+    doc.build(s, onFirstPage=on_page, onLaterPages=on_page)
+    return buf.getvalue()
+
+
 def build_labour_cost(projects, meta, brand):
     buf = io.BytesIO()
     st = _styles()

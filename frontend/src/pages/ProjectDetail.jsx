@@ -15,7 +15,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Calendar, IndianRupee, Flag } from "lucide-react";
 import { ActivitiesTab } from "@/pages/project/ActivitiesTab";
 import { ProgressTab } from "@/pages/project/ProgressTab";
-import { DefectsTab } from "@/pages/project/DefectsTab";
+import { InspectionTab } from "@/pages/project/InspectionTab";
+import { MaterialApprovalsTab } from "@/pages/project/MaterialApprovalsTab";
 import { PhotosTab } from "@/pages/project/PhotosTab";
 import { TeamTab } from "@/pages/project/TeamTab";
 import { AuditTab } from "@/pages/project/AuditTab";
@@ -32,7 +33,8 @@ export default function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const [perm, setPerm] = useState(null);
   useEffect(() => {
-    if ((user.enterprise?.modules || []).includes("dpr") && user.role !== "client")
+    const mods = user.enterprise?.modules || [];
+    if ((mods.includes("dpr") && user.role !== "client") || mods.includes("res_dpr"))
       api.get(`/projects/${id}/my-permissions`).then((r) => setPerm(r.data)).catch(() => setPerm(null));
   }, [id, user]);
 
@@ -49,7 +51,10 @@ export default function ProjectDetail() {
   const showValue = manager || project.client_budget_visible;
   const hasProcurement = (user.enterprise?.modules || []).includes("procurement");
   const commercial = (user.enterprise?.modules || []).includes("dpr") && user.role !== "client";
-  const hasDefects = (user.enterprise?.modules || []).includes("defects");
+  const mods = user.enterprise?.modules || [];
+  const hasInspection = mods.includes("inspection");
+  const resDpr = mods.includes("res_dpr") && perm;
+  const hasMaterials = mods.includes("material_approval");
 
   return (
     <div className="space-y-6">
@@ -82,7 +87,9 @@ export default function ProjectDetail() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
           <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
-          {hasDefects && <TabsTrigger value="defects" data-testid="tab-defects">Defects</TabsTrigger>}
+          {hasInspection && <TabsTrigger value="inspection" data-testid="tab-inspection">Inspection Checklist</TabsTrigger>}
+          {resDpr && <TabsTrigger value="dpr" data-testid="tab-dpr">DPR</TabsTrigger>}
+          {hasMaterials && <TabsTrigger value="materials" data-testid="tab-materials">Materials</TabsTrigger>}
           {hasProcurement && <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>}
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
@@ -99,7 +106,9 @@ export default function ProjectDetail() {
         </TabsContent>
         <TabsContent value="activities" className="mt-5"><ActivitiesTab project={project} role={user.role} reload={load} /></TabsContent>
         <TabsContent value="progress" className="mt-5"><ProgressTab project={project} role={user.role} userId={user.id} /></TabsContent>
-        {hasDefects && <TabsContent value="defects" className="mt-5"><DefectsTab project={project} role={user.role} /></TabsContent>}
+        {hasInspection && <TabsContent value="inspection" className="mt-5"><InspectionTab project={project} role={user.role} /></TabsContent>}
+        {resDpr && <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} initialDpr={searchParams.get("dpr")} /></TabsContent>}
+        {hasMaterials && <TabsContent value="materials" className="mt-5"><MaterialApprovalsTab project={project} role={user.role} userId={user.id} /></TabsContent>}
         {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>

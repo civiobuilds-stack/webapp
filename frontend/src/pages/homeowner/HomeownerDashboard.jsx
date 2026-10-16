@@ -10,6 +10,7 @@ import { Home, CalendarDays, ArrowRight } from "lucide-react";
 import { BuildTimeline } from "@/pages/homeowner/BuildTimeline";
 import { DecisionCards } from "@/pages/homeowner/DecisionCards";
 import { TeamContactCard } from "@/pages/homeowner/TeamContactCard";
+import { PendingMaterials } from "@/pages/project/MaterialApprovalsTab";
 
 function ProgressRing({ value }) {
   const r = 52, c = 2 * Math.PI * r, off = c - (Math.min(100, value) / 100) * c;
@@ -96,6 +97,7 @@ export default function HomeownerDashboard() {
       )}
       <HomeHero project={d.project} />
       <DecisionCards updates={pending} onDone={load} />
+      <PendingMaterials role="client" />
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <BuildTimeline milestones={d.milestones} activities={d.activities} />
         <TeamContactCard project={d.project} />

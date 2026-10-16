@@ -41,8 +41,8 @@ ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "s
 DEFAULT_ENTERPRISE_ID = "civio"
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
-    "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store"},
-    "residential": ALL_MODULES - {"procurement"},
+    "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store", "inspection"},
+    "residential": (ALL_MODULES - {"procurement", "defects"}) | {"inspection", "res_dpr", "material_approval"},
 }
 DEFAULT_PLANS = [
     {"id": "free", "name": "Free Trial", "price_monthly": 0, "max_users": 5, "max_projects": 2, "max_storage_mb": 500,
@@ -199,7 +199,7 @@ def require_roles(*roles):
 
 
 async def get_project_or_403(project_id: str, user: dict, write: bool = False) -> dict:
-    project = await db.projects.find_one({"id": project_id, "company_id": user.get("company_id")}, {"_id": 0})
+    project = await db.projects.find_one({"id": project_id, "company_id": user.get("company_id"), "is_deleted": {"$ne": True}}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     role = user["role"]
@@ -298,6 +298,8 @@ class UserCreateIn(BaseModel):
     name: str
     role: str  # site_engineer | client | project_manager
     phone: Optional[str] = None
+    job_title: str = Field(default="", max_length=80)
+    job_description: str = Field(default="", max_length=1000)
 
 
 class ProjectIn(BaseModel):
@@ -491,7 +493,9 @@ def public_user(u: dict) -> dict:
             "platform_role": u.get("platform_role"), "company_id": u.get("company_id"),
             "must_change_password": bool(u.get("must_change_password")),
             "employee_id": u.get("employee_id"), "designation": u.get("designation"),
-            "department": u.get("department"), "reporting_manager_id": u.get("reporting_manager_id")}
+            "department": u.get("department"), "reporting_manager_id": u.get("reporting_manager_id"),
+            "job_title": u.get("job_title"), "job_description": u.get("job_description"),
+            "is_active": u.get("is_active", True), "last_login_at": u.get("last_login_at"), "created_at": u.get("created_at")}
 
 
 def public_enterprise(e: Optional[dict]) -> Optional[dict]:
@@ -619,12 +623,17 @@ async def login(body: LoginIn, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    if user.get("email_verified") is False:
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="This account has been deactivated. Contact your admin.")
+    if user.get("email_verified") is False and user.get("role") != "admin":
+        await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}})
+    elif user.get("email_verified") is False:
         await issue_otp(user)
         raise HTTPException(status_code=403, detail={"code": "email_not_verified", "email": email,
                                                      "message": "Please verify your email. We've sent you a new code."})
     token = create_access_token(user["id"], email, user["role"])
     set_auth_cookie(response, token)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"last_login_at": now_iso()}})
     return {"access_token": token, "user": public_user(user)}
 
 
@@ -748,22 +757,22 @@ async def create_user(body: UserCreateIn, user: dict = Depends(require_roles("ad
         "id": uid, "email": email, "password_hash": hash_password(body.password),
         "name": body.name, "role": body.role, "phone": body.phone,
         "company_id": user["company_id"], "is_active": True, "is_demo": False,
-        "email_verified": False, "created_at": now_iso(),
+        "email_verified": True, "created_at": now_iso(), "created_by": user["id"],
+        "job_title": body.job_title, "job_description": body.job_description,
     }
     await db.users.insert_one(doc)
-    await issue_otp(doc)
-    out = public_user(doc)
-    out["requires_verification"] = True
-    return out
+    return public_user(doc)
 
 
 # ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------
 async def enrich_project(p: dict) -> dict:
-    ids = list(filter(None, [p.get("client_id"), p.get("project_manager_id")] + p.get("engineer_ids", [])))
+    team = [t for t in p.get("team", []) if not t.get("removed_at")]
+    ids = list(filter(None, [p.get("client_id"), p.get("project_manager_id")] + p.get("engineer_ids", []) + [t["user_id"] for t in team]))
     users = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "password_hash": 0}).to_list(1000)
     umap = {u["id"]: public_user(u) for u in users}
+    p["team"] = [{**t, "user": umap.get(t["user_id"])} for t in team]
     p["client"] = umap.get(p.get("client_id"))
     p["project_manager"] = umap.get(p.get("project_manager_id"))
     p["engineers"] = [umap[e] for e in p.get("engineer_ids", []) if e in umap]
@@ -1213,6 +1222,13 @@ async def client_visible_file_ids(project_id: str) -> set:
     for d in defs:
         ids.update(d.get("before_photo_ids", []))
         ids.update(d.get("closure_photo_ids", []))
+    async for it in db.inspection_items.find({"project_id": project_id, "status": {"$in": ["pass", "fail", "na"]}}, {"_id": 0, "photo_ids": 1}):
+        ids.update(it.get("photo_ids", []))
+    async for doc in db.project_documents.find({"project_id": project_id, "is_deleted": {"$ne": True}}, {"_id": 0, "file_id": 1}):
+        ids.add(doc["file_id"])
+    async for d in db.dprs.find({"project_id": project_id, "status": "approved"}, {"_id": 0, "photos": 1, "auto_photo_ids": 1}):
+        ids.update(p["file_id"] for p in d.get("photos", []))
+        ids.update(d.get("auto_photo_ids", []))
     return ids
 
 
@@ -1291,7 +1307,7 @@ async def dashboard_summary(user: dict = Depends(get_current_user)):
             pending_reviews = await db.progress_updates.count_documents({"project_id": {"$in": pids}, "status": {"$in": ["submitted", "clarification_needed"]}})
         if user["role"] == "client":
             pending_client = await db.progress_updates.count_documents({"project_id": {"$in": pids}, "status": "pending_client_decision"})
-        open_defects = await db.defects.count_documents({"project_id": {"$in": pids}, "status": {"$nin": ["closed"]}})
+        open_defects = await db.inspection_items.count_documents({"project_id": {"$in": pids}, "status": "fail"})
     notif = await db.notifications.count_documents({"user_id": user["id"], "read": False})
     return {
         "projects": len(projects),
@@ -1925,6 +1941,10 @@ import store as store_module  # noqa: E402
 api_router.include_router(store_module.router)
 import labour_cost  # noqa: E402
 api_router.include_router(labour_cost.router)
+import residential  # noqa: E402
+import inspection  # noqa: E402
+api_router.include_router(residential.router)
+api_router.include_router(inspection.router)
 
 
 async def migrate_multitenant():

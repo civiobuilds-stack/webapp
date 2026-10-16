@@ -216,7 +216,7 @@ class BoqIn(BaseModel):
 
 
 @router.get("/projects/{pid}/boq")
-async def list_boq(pid: str, user: dict = Depends(C.commercial_user)):
+async def list_boq(pid: str, user: dict = Depends(C.dpr_user)):
     await C.require_perm(user, pid, "dpr", "view")
     items = await S.db.boq_items.find({"project_id": pid}, {"_id": 0}).sort("code", 1).to_list(2000)
     for b in items:
@@ -226,7 +226,7 @@ async def list_boq(pid: str, user: dict = Depends(C.commercial_user)):
 
 
 @router.post("/projects/{pid}/boq")
-async def create_boq(pid: str, body: BoqIn, user: dict = Depends(C.commercial_user)):
+async def create_boq(pid: str, body: BoqIn, user: dict = Depends(C.dpr_user)):
     project = await S.get_project_or_403(pid, user)
     if not C._manages(user, project):
         raise HTTPException(status_code=403, detail="Only the project manager or admin can approve BOQ items.")

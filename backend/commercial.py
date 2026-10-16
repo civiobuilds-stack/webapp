@@ -38,6 +38,17 @@ async def commercial_user(user: dict = Depends(S.get_current_user)) -> dict:
     return user
 
 
+def _dpr_ok(user):
+    mods = S.MODULES.get((user.get("_enterprise") or {}).get("business_type", "commercial"), set())
+    if not ({"dpr", "res_dpr"} & mods):
+        raise HTTPException(status_code=403, detail="This module is not available for your workspace type.")
+
+
+async def dpr_user(user: dict = Depends(S.get_current_user)) -> dict:
+    _dpr_ok(user)
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Permissions
 # ---------------------------------------------------------------------------
@@ -54,6 +65,8 @@ async def perms_for(user, project) -> Dict[str, List[str]]:
         return m.get("permissions") or {}
     if user["id"] in project.get("engineer_ids", []):
         return ENGINEER_DEFAULT
+    if user["role"] == "client" and project.get("client_id") == user["id"]:
+        return {"dpr": ["view"]}
     return {}
 
 
@@ -179,7 +192,7 @@ async def list_members(pid: str, user: dict = Depends(commercial_user)):
 
 
 @router.get("/projects/{pid}/my-permissions")
-async def my_permissions(pid: str, user: dict = Depends(commercial_user)):
+async def my_permissions(pid: str, user: dict = Depends(dpr_user)):
     project = await S.get_project_or_403(pid, user)
     return {"permissions": await perms_for(user, project), "manages": _manages(user, project),
             "modules": PERM_MODULES, "actions": ACTIONS}
@@ -418,19 +431,20 @@ async def _validate_dpr(pid, body: DprIn):
 
 async def _get_dpr(did, user):
     d = await S.db.dprs.find_one({"id": did, "company_id": user["company_id"]}, {"_id": 0})
-    if not d:
+    if not d or (user["role"] == "client" and d["status"] != "approved"):
         raise HTTPException(status_code=404, detail="DPR not found")
     return d
 
 
 @router.get("/projects/{pid}/dprs")
-async def list_dprs(pid: str, user: dict = Depends(commercial_user)):
+async def list_dprs(pid: str, user: dict = Depends(dpr_user)):
     await require_perm(user, pid, "dpr", "view")
-    return await S.db.dprs.find({"project_id": pid}, {"_id": 0, "history": 0}).sort("report_date", -1).to_list(1000)
+    q = {"project_id": pid, **({"status": "approved"} if user["role"] == "client" else {})}
+    return await S.db.dprs.find(q, {"_id": 0, "history": 0}).sort("report_date", -1).to_list(1000)
 
 
 @router.post("/projects/{pid}/dprs")
-async def create_dpr(pid: str, body: DprIn, user: dict = Depends(commercial_user)):
+async def create_dpr(pid: str, body: DprIn, user: dict = Depends(dpr_user)):
     await require_perm(user, pid, "dpr", "create")
     if await S.db.dprs.find_one({"project_id": pid, "report_date": body.report_date}):
         raise HTTPException(status_code=409, detail="A DPR already exists for this project and date.")
@@ -447,7 +461,7 @@ async def create_dpr(pid: str, body: DprIn, user: dict = Depends(commercial_user
 
 
 @router.get("/dprs/{did}")
-async def get_dpr(did: str, user: dict = Depends(commercial_user)):
+async def get_dpr(did: str, user: dict = Depends(dpr_user)):
     d = await _get_dpr(did, user)
     await require_perm(user, d["project_id"], "dpr", "view")
     files = await S.db.files.find({"id": {"$in": [p["file_id"] for p in d.get("photos", [])]}}, {"_id": 0}).to_list(100)
@@ -456,7 +470,7 @@ async def get_dpr(did: str, user: dict = Depends(commercial_user)):
 
 
 @router.put("/dprs/{did}")
-async def update_dpr(did: str, body: DprIn, user: dict = Depends(commercial_user)):
+async def update_dpr(did: str, body: DprIn, user: dict = Depends(dpr_user)):
     d = await _get_dpr(did, user)
     await require_perm(user, d["project_id"], "dpr", "edit")
     if d["status"] not in {"draft", "returned"}:
@@ -469,7 +483,7 @@ async def update_dpr(did: str, body: DprIn, user: dict = Depends(commercial_user
 
 
 @router.delete("/dprs/{did}")
-async def delete_dpr(did: str, user: dict = Depends(commercial_user)):
+async def delete_dpr(did: str, user: dict = Depends(dpr_user)):
     d = await _get_dpr(did, user)
     await require_perm(user, d["project_id"], "dpr", "delete")
     if d["status"] != "draft":
@@ -480,7 +494,7 @@ async def delete_dpr(did: str, user: dict = Depends(commercial_user)):
 
 
 @router.post("/dprs/{did}/submit")
-async def submit_dpr(did: str, user: dict = Depends(commercial_user)):
+async def submit_dpr(did: str, user: dict = Depends(dpr_user)):
     d = await _get_dpr(did, user)
     project, _ = await require_perm(user, d["project_id"], "dpr", "submit")
     if d["status"] not in {"draft", "returned"}:
@@ -496,7 +510,7 @@ async def submit_dpr(did: str, user: dict = Depends(commercial_user)):
 
 
 @router.post("/dprs/{did}/review")
-async def review_dpr(did: str, body: DprReview, user: dict = Depends(commercial_user)):
+async def review_dpr(did: str, body: DprReview, user: dict = Depends(dpr_user)):
     d = await _get_dpr(did, user)
     project, _ = await require_perm(user, d["project_id"], "dpr", "approve")
     if d["status"] != "submitted":
@@ -532,13 +546,29 @@ async def review_dpr(did: str, body: DprReview, user: dict = Depends(commercial_
     return await get_dpr(did, user)
 
 
+async def _day_photos(d, exclude, limit):
+    """Project images uploaded on the DPR date (IST) by the site team, not already attached."""
+    if limit <= 0:
+        return []
+    day = datetime.fromisoformat(d["report_date"]).replace(tzinfo=IST)
+    lo, hi = day.astimezone(timezone.utc).isoformat(), (day + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+    team = await S.db.users.find({"company_id": d["company_id"], "role": {"$ne": "client"}}, {"_id": 0, "id": 1}).to_list(2000)
+    q = {"project_id": d["project_id"], "is_deleted": False, "content_type": {"$regex": "^image/"}, "created_at": {"$gte": lo, "$lt": hi},
+         "id": {"$nin": list(exclude)}, "uploaded_by": {"$in": [u["id"] for u in team]}}
+    out = await S.db.files.find(q, {"_id": 0}).sort("created_at", 1).to_list(limit)
+    if out and d["status"] == "approved" and not d.get("auto_photo_ids"):
+        await S.db.dprs.update_one({"id": d["id"]}, {"$set": {"auto_photo_ids": [f["id"] for f in out]}})
+    return out
+
+
 @router.get("/dprs/{did}/pdf")
 async def dpr_pdf(did: str, request: Request, auth: str = Query(None)):
     user = await S.user_from_query_token(request, auth)
-    _commercial(user)
+    _dpr_ok(user)
     d = await _get_dpr(did, user)
     project, _ = await require_perm(user, d["project_id"], "dpr", "view")
     files = await S.db.files.find({"id": {"$in": [p["file_id"] for p in d.get("photos", [])]}, "is_deleted": False}, {"_id": 0}).to_list(20)
+    files += await _day_photos(d, {f["id"] for f in files}, 12 - len(files))
     cap = {p["file_id"]: p.get("caption") for p in d.get("photos", [])}
     got = await asyncio.gather(*[asyncio.to_thread(S.storage.get_object, f["storage_path"]) for f in files[:9]], return_exceptions=True)
     photos = [(g[0], cap.get(f["id"]) or f.get("original_filename"), f.get("created_at")) for f, g in zip(files, got) if not isinstance(g, Exception)]

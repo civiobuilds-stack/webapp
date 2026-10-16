@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlanUsageCard } from "@/components/PlanUsageCard";
 import HomeownerDashboard from "@/pages/homeowner/HomeownerDashboard";
+import { PendingMaterials } from "@/pages/project/MaterialApprovalsTab";
 import {
   FolderKanban, ClipboardCheck, AlertTriangle, Bell, TrendingUp, ArrowRight, HardHat, Building2,
 } from "lucide-react";
@@ -40,19 +41,19 @@ function Dashboard() {
     ? [
         { key: "projects", label: "Active Projects", value: summary?.active_projects, icon: Building2 },
         { key: "pending_reviews", label: "Pending Reviews", value: summary?.pending_reviews, icon: ClipboardCheck, accent: summary?.pending_reviews > 0 },
-        { key: "open_defects", label: "Open Defects", value: summary?.open_defects, icon: AlertTriangle, accent: summary?.open_defects > 0 },
+        { key: "open_defects", label: "Failed Inspections", value: summary?.open_defects, icon: AlertTriangle, accent: summary?.open_defects > 0 },
         { key: "avg", label: "Avg. Progress", value: `${summary?.avg_progress ?? 0}%`, icon: TrendingUp },
       ]
     : user.role === "client"
     ? [
         { key: "projects", label: "My Projects", value: summary?.projects, icon: Building2 },
         { key: "pending", label: "Decisions Pending", value: summary?.pending_client_decisions, icon: ClipboardCheck, accent: summary?.pending_client_decisions > 0 },
-        { key: "defects", label: "Open Defects", value: summary?.open_defects, icon: AlertTriangle },
+        { key: "defects", label: "Failed Inspections", value: summary?.open_defects, icon: AlertTriangle },
         { key: "avg", label: "Avg. Progress", value: `${summary?.avg_progress ?? 0}%`, icon: TrendingUp },
       ]
     : [
         { key: "projects", label: "My Sites", value: summary?.projects, icon: HardHat },
-        { key: "defects", label: "Open Defects", value: summary?.open_defects, icon: AlertTriangle, accent: summary?.open_defects > 0 },
+        { key: "defects", label: "Failed Inspections", value: summary?.open_defects, icon: AlertTriangle, accent: summary?.open_defects > 0 },
         { key: "notif", label: "Notifications", value: summary?.unread_notifications, icon: Bell, accent: summary?.unread_notifications > 0 },
         { key: "avg", label: "Avg. Progress", value: `${summary?.avg_progress ?? 0}%`, icon: TrendingUp },
       ];
@@ -67,6 +68,7 @@ function Dashboard() {
         </p>
       </div>
 
+      {user.role !== "site_engineer" && <PendingMaterials role={user.role} />}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)

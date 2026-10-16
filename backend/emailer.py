@@ -273,3 +273,21 @@ def tool_overdue_email_html(name: str, info: dict, is_cc: bool) -> str:
         f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p>'
         f'</td></tr></table></td></tr></table>'
     )
+
+
+def material_approval_email_html(name: str, project: str, m: dict) -> str:
+    return (
+        f'<table role="presentation" width="100%" style="background:#f4f6f9;padding:24px"><tr><td align="center">'
+        f'<table role="presentation" width="520" style="background:#ffffff;border-radius:14px;overflow:hidden;{_BASE}">'
+        f'<tr><td style="background:#0D1B3E;padding:20px 28px;color:#fff;font-size:20px;font-weight:bold;letter-spacing:1px">CIVIO</td></tr>'
+        f'<tr><td style="padding:28px"><p style="margin:0 0 10px">Hi {escape(name)},</p>'
+        f'<p style="margin:0 0 16px">A material request on <b>{escape(project)}</b> needs your approval.</p>'
+        f'<table role="presentation" width="100%" style="background:#eef3ff;border-radius:10px"><tr><td style="padding:16px 18px">'
+        f'<div style="font-size:16px;font-weight:bold;color:#0D1B3E">{m["quantity"]} {escape(m["unit"])} · {escape(m["item"])}</div>'
+        f'<div style="font-size:13px;color:#555;margin-top:4px">Required by {escape(m.get("required_date") or "—")} · Requested by {escape(m["requested_by_name"])}</div>'
+        f'<div style="font-size:13px;color:#555;margin-top:4px">{escape(m.get("remarks") or "")}</div>'
+        f'</td></tr></table>'
+        f'<p style="margin:18px 0 0;font-size:14px">Sign in to CIVIO to approve or reject it from your dashboard.</p>'
+        f'<p style="margin:16px 0 0;font-size:12px;color:#888">Sent by CIVIO — Your Build, Our Expertise.</p>'
+        f'</td></tr></table></td></tr></table>'
+    )
