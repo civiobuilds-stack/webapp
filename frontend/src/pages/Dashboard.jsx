@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlanUsageCard } from "@/components/PlanUsageCard";
 import HomeownerDashboard from "@/pages/homeowner/HomeownerDashboard";
 import { PendingMaterials } from "@/pages/project/MaterialApprovalsTab";
+import { RoleDashboard } from "@/components/RoleDashboard";
 import {
   FolderKanban, ClipboardCheck, AlertTriangle, Bell, TrendingUp, ArrowRight, HardHat, Building2,
 } from "lucide-react";
@@ -69,6 +70,7 @@ function Dashboard() {
       </div>
 
       {user.role !== "site_engineer" && <PendingMaterials role={user.role} />}
+      {user.enterprise?.business_type === "commercial" && user.role !== "client" && <RoleDashboard />}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)

@@ -229,6 +229,9 @@ def build_inspection(project, stages, summary, docs, photos, meta, brand):
     for g in stages:
         done = [i for i in g["items"] if i["status"] != "pending"]
         s.append(Paragraph(f"{g['stage']}  ({len(done)}/{len(g['items'])} inspected)", st["CivH2"]))
+        if g.get("signoff"):
+            so = g["signoff"]
+            s.append(Paragraph(f"<b>Client sign-off:</b> Approved by {so['signed_by_name']} on {_fmt_date(so['signed_at'])}" + (f" — {so['remarks']}" if so.get("remarks") else ""), st["CivBody"]))
         s.append(_data_table(["Checklist item", "Status", "Remarks", "Responsible", "Photos"],
                              [[i["item"], label[i["status"]], i.get("remarks") or "—", i.get("responsible_name") or "—", len(i.get("photo_ids", []))] for i in g["items"]],
                              st, [62 * mm, 18 * mm, 52 * mm, 30 * mm, 18 * mm]))

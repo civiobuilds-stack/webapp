@@ -22,6 +22,7 @@ async def seed_all(db, hash_password, now_iso):
                                                                   "must_change_password": False, "bootstrap_v2": True, "bootstrap_v3": True}})
 
     await seed_residential(db, hash_password, now_iso)
+    await seed_roles(db, hash_password, now_iso)
     # Only seed demo content once.
     if await db.projects.find_one({"is_demo": True}):
         return
@@ -211,3 +212,17 @@ async def seed_residential(db, hash_password, now_iso):
         "start_date": ts, "planned_completion_date": None, "status": "In Progress", "contract_value": 9500000,
         "project_manager_id": "res-pm", "engineer_ids": ["res-eng"], "client_budget_visible": False, "progress_percent": 0,
         "is_archived": False, "is_demo": True, "created_by": "res-owner", "created_at": ts})
+
+
+async def seed_roles(db, hash_password, now_iso):
+    """Commercial demo accounts for the extended role structure (idempotent)."""
+    for uid, email, name, role in [("user-store", "store@civio.build", "Suresh Kumar (Store In-charge)", "store_incharge"),
+                                   ("user-storemgr", "storemanager@civio.build", "Lata Menon (Store Manager)", "store_manager"),
+                                   ("user-pass", "pass@civio.build", "Imran Shaikh (Pass Coordinator)", "pass_coordinator")]:
+        if not await db.users.find_one({"email": email}):
+            await db.users.insert_one({"id": uid, "email": email, "password_hash": hash_password("CivioRole@2026"), "name": name, "role": role,
+                                       "phone": "+91 98200 55555", "company_id": "civio", "is_active": True, "is_demo": True,
+                                       "email_verified": True, "created_at": now_iso()})
+    if not await db.project_members.find_one({"project_id": "proj-demo-1", "user_id": "user-pass"}):
+        await db.project_members.insert_one({"project_id": "proj-demo-1", "user_id": "user-pass", "company_id": "civio", "responsibility": "Gate passes",
+                                             "permissions": {}, "created_at": now_iso()})

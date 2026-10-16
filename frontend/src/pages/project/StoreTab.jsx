@@ -35,7 +35,8 @@ function FormDialog({ title, fields, photo, projectId, onSubmit, onClose, testid
   );
 }
 
-function RequestRow({ r, perms, setDlg, reload }) {
+function RequestRow({ r, perms, meta, setDlg, reload }) {
+  const staff = meta?.store_staff, pr = r.pending_return;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm" data-testid="store-request-row">
       <div><b>{r.item}</b> · {r.quantity} {r.unit} <Badge variant="outline" className="ml-1 capitalize">{r.kind}</Badge>
@@ -48,14 +49,20 @@ function RequestRow({ r, perms, setDlg, reload }) {
         {can(perms, "approve") && r.status === "requested" && <>
           <Button size="sm" onClick={() => run(() => api.post(`/store/requests/${r.id}/decision`, { action: "approve" }), "Approved", reload)} data-testid="store-approve-btn"><Check className="h-4 w-4" /></Button>
           <Button size="sm" variant="outline" onClick={() => run(() => api.post(`/store/requests/${r.id}/decision`, { action: "reject" }), "Rejected", reload)} data-testid="store-reject-btn"><X className="h-4 w-4" /></Button></>}
-        {can(perms, "approve") && ["approved", "partially_issued"].includes(r.status) && <Button size="sm" onClick={() => setDlg({ type: "issue", r })} data-testid="store-issue-btn"><PackageCheck className="h-4 w-4" /> Issue</Button>}
-        {can(perms, "approve") && r.kind === "tool" && ["issued", "partially_issued", "partially_returned"].includes(r.status) && <Button size="sm" variant="outline" onClick={() => setDlg({ type: "return", r })} data-testid="store-return-btn"><Undo2 className="h-4 w-4" /> Return</Button>}
+        {r.status === "shortage" && <Badge className="bg-rose-600 text-white" data-testid="store-shortage-badge">Short {r.shortage_qty}</Badge>}
+        {pr && <Badge className="bg-blue-600 text-white" data-testid="store-return-stage">{pr.stage === "awaiting_store" ? "Return: store to verify" : "Return: PM to approve"}</Badge>}
+        {staff && ["approved", "partially_issued", "shortage"].includes(r.status) && <Button size="sm" onClick={() => setDlg({ type: "issue", r })} data-testid="store-issue-btn"><PackageCheck className="h-4 w-4" /> Issue</Button>}
+        {can(perms, "create") && !pr && r.kind === "tool" && ["issued", "partially_issued", "partially_returned"].includes(r.status) && <Button size="sm" variant="outline" onClick={() => setDlg({ type: "return", r })} data-testid="store-return-btn"><Undo2 className="h-4 w-4" /> Return</Button>}
+        {staff && pr?.stage === "awaiting_store" && <Button size="sm" variant="outline" onClick={() => setDlg({ type: "verify", r })} data-testid="store-return-receive-btn">Verify return</Button>}
+        {meta?.manages && pr?.stage === "awaiting_pm" && <>
+          <Button size="sm" onClick={() => run(() => api.post(`/store/requests/${r.id}/return/approve`, { action: "approve" }), "Return approved", reload)} data-testid="store-return-approve-btn"><Check className="h-4 w-4" /> Approve return</Button>
+          <Button size="sm" variant="outline" onClick={() => run(() => api.post(`/store/requests/${r.id}/return/approve`, { action: "reject", comment: "Rejected by PM" }), "Return rejected", reload)} data-testid="store-return-reject-btn"><X className="h-4 w-4" /></Button></>}
       </div>
     </div>
   );
 }
 
-export function StoreTab({ project, perms }) {
+export function StoreTab({ project, perms, meta }) {
   const [reqs, setReqs] = useState([]);
   const [stock, setStock] = useState([]);
   const [txns, setTxns] = useState([]);
@@ -75,15 +82,16 @@ export function StoreTab({ project, perms }) {
         <div className="flex gap-2">
           {can(perms, "create") && <><Button onClick={() => setDlg({ type: "material" })} data-testid="new-material-request-btn"><Plus className="h-4 w-4" /> Material request</Button>
             <Button variant="outline" onClick={() => setDlg({ type: "tool" })} data-testid="new-tool-request-btn"><Plus className="h-4 w-4" /> Tool request</Button></>}
-          {can(perms, "approve") && <Button variant="secondary" onClick={() => setDlg({ type: "receive" })} data-testid="receive-stock-btn"><PackagePlus className="h-4 w-4" /> Receive stock</Button>}
+          <a href="/store"><Button variant="secondary" data-testid="company-store-link"><PackagePlus className="h-4 w-4" /> Company store</Button></a>
         </div></div>
       <Tabs defaultValue="requests">
-        <TabsList><TabsTrigger value="requests">Requests</TabsTrigger><TabsTrigger value="stock" data-testid="store-stock-tab">Inventory</TabsTrigger><TabsTrigger value="txns" data-testid="store-txn-tab">Transactions</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="requests">Requests</TabsTrigger><TabsTrigger value="stock" data-testid="store-stock-tab">Project inventory</TabsTrigger><TabsTrigger value="txns" data-testid="store-txn-tab">Transactions</TabsTrigger></TabsList>
         <TabsContent value="requests" className="mt-3"><Card className="divide-y">{reqs.length === 0 && <p className="p-4 text-sm text-muted-foreground">No requests yet.</p>}
-          {reqs.map((r) => <RequestRow key={r.id} r={r} perms={perms} setDlg={setDlg} reload={load} />)}</Card></TabsContent>
-        <TabsContent value="stock" className="mt-3"><Card className="divide-y">{stock.length === 0 && <p className="p-4 text-sm text-muted-foreground">No stock recorded.</p>}
-          {stock.map((s) => <div key={s.item_key} className="flex flex-wrap justify-between gap-2 p-3 text-sm" data-testid="stock-row"><span><b>{s.item}</b> <Badge variant="outline" className="capitalize">{s.kind}</Badge></span>
-            <span>Available <b data-testid="stock-available">{s.available}</b> {s.unit} · issued out {s.issued_out} · consumed {s.consumed} · damaged {s.damaged} · lost {s.lost}</span></div>)}</Card></TabsContent>
+          {reqs.map((r) => <RequestRow key={r.id} r={r} perms={perms} meta={meta} setDlg={setDlg} reload={load} />)}</Card></TabsContent>
+        <TabsContent value="stock" className="mt-3"><Card className="divide-y">{stock.length === 0 && <p className="p-4 text-sm text-muted-foreground">Nothing issued to this project yet.</p>}
+          {stock.map((s) => <div key={s.request_id} className="flex flex-wrap justify-between gap-2 p-3 text-sm" data-testid="stock-row"><span><b>{s.item}</b> <Badge variant="outline" className="capitalize">{s.kind}</Badge>
+            <div className="text-xs text-muted-foreground">Issued {formatDateTime(s.issued_at)} to {s.responsible_person || "—"} · {s.status.replace("_", " ")}</div></span>
+            <span>Issued <b>{s.issued}</b> {s.unit}{s.kind === "tool" ? <> · on site <b data-testid="stock-on-site">{s.on_site}</b> · returned {s.returned} · damaged {s.damaged} · lost {s.lost}</> : ""}</span></div>)}</Card></TabsContent>
         <TabsContent value="txns" className="mt-3"><Card className="divide-y">{txns.map((t) => <div key={t.id} className="p-3 text-sm" data-testid="store-txn-row">
           <b className="capitalize">{t.type}</b> · {t.quantity} {t.item} · to/from {t.responsible_person} · by {t.by_name} · {formatDateTime(t.at)} · {t.photo_ids.length} photo(s)</div>)}</Card></TabsContent>
       </Tabs>
@@ -97,10 +105,10 @@ export function StoreTab({ project, perms }) {
         hint={(f) => { const out = dlg.r.issued_qty - dlg.r.returned_qty - dlg.r.damaged_qty - dlg.r.lost_qty; const left = out - (f.good || 0) - (f.damaged || 0) - (f.lost || 0);
           return left < 0 ? `Exceeds outstanding by ${-left} — only ${out} ${dlg.r.unit} still with site` : `Outstanding with site: ${out} ${dlg.r.unit} · after this return: ${left}`; }}
         fields={[["good", "Returned in good condition", "number", 0], ["damaged", "Damaged", "number", 0], ["lost", "Lost", "number", 0], ["responsible_person", "Returned by"], ["note", "Note"]]}
-        onSubmit={(f) => run(() => api.post(`/store/requests/${dlg.r.id}/return`, f), "Return recorded", close)} />}
-      {dlg?.type === "receive" && <FormDialog testid="store-receive" title="Receive stock into project store" photo projectId={pid} onClose={() => setDlg(null)}
-        fields={[["item", "Item"], ["kind", "Kind", "select", "material", ["material", "tool"]], ["quantity", "Quantity", "number", 1], ["unit", "Unit", "text", "nos"], ["responsible_person", "Received from / by"], ["note", "Note"]]}
-        onSubmit={(f) => run(() => api.post(`/projects/${pid}/store/receive`, f), "Stock received", close)} />}
+        onSubmit={(f) => run(() => api.post(`/store/requests/${dlg.r.id}/return`, f), "Return sent to store for verification", close)} />}
+      {dlg?.type === "verify" && <FormDialog testid="store-verify" title={`Verify return · ${dlg.r.item}`} photo projectId={pid} onClose={() => setDlg(null)}
+        hint={() => `Engineer reports: good ${dlg.r.pending_return.good}, damaged ${dlg.r.pending_return.damaged}, lost ${dlg.r.pending_return.lost}`}
+        fields={[["note", "Remarks"]]} onSubmit={(f) => run(() => api.post(`/store/requests/${dlg.r.id}/return/receive`, f), "Return received — sent to PM", close)} />}
     </div>
   );
 }

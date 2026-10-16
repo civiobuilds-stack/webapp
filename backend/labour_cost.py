@@ -182,7 +182,8 @@ async def cost_logs(user: dict = Depends(C.commercial_user)):
 # ---------------------------------------------------------------------------
 async def remind_overdue(company_id=None):
     today = _today().isoformat()
-    q = {"kind": "tool", "status": {"$in": OPEN_TOOL}, "expected_return": {"$nin": [None, ""], "$lt": today}}
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    q = {"kind": "tool", "status": {"$in": OPEN_TOOL}, "$or": [{"expected_return": {"$nin": [None, ""], "$lt": today}}, {"issued_at": {"$lt": week_ago}}]}
     if company_id:
         q["company_id"] = company_id
     sent = 0
@@ -197,9 +198,12 @@ async def remind_overdue(company_id=None):
         out = r["issued_qty"] - r["returned_qty"] - r["damaged_qty"] - r["lost_qty"]
         if out <= 0:
             continue
-        days = (_today() - datetime.fromisoformat(r["expected_return"][:10]).date()).days
+        due = (r.get("expected_return") or "")[:10] or (datetime.fromisoformat(r["issued_at"]) + timedelta(days=7)).date().isoformat()
+        r["expected_return"] = due
+        days = max((_today() - datetime.fromisoformat(due).date()).days, 0)
         holder = await S.db.users.find_one({"id": r["requested_by"]}, {"_id": 0, "id": 1, "email": 1, "name": 1})
-        cc_ids = [i for i in await C.recipients_with(project, "store", "approve") if i != r["requested_by"]]
+        store_ids = [u["id"] async for u in S.db.users.find({"company_id": r["company_id"], "role": {"$in": ["store_incharge", "store_manager"]}, "is_active": {"$ne": False}}, {"_id": 0, "id": 1})]
+        cc_ids = list({i for i in await C.recipients_with(project, "store", "approve") + store_ids if i != r["requested_by"]})
         cc = await S.db.users.find({"id": {"$in": cc_ids}, "is_active": {"$ne": False}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(50)
         link = f"/projects/{r['project_id']}?tab=store"
         msg = f"OVERDUE: {out} {r['unit']} {r['item']} was due back on {r['expected_return'][:10]} ({days} day(s) late) — {project['name']}."

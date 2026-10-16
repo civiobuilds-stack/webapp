@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, apiError, API, getToken } from "@/lib/api";
-import { isManager } from "@/lib/format";
+import { isManager, formatDateTime } from "@/lib/format";
 import { CameraCapture } from "@/components/CameraCapture";
 import { PhotoGrid } from "@/components/PhotoUpload";
 import { DocumentsPanel } from "@/pages/project/DocumentsPanel";
@@ -41,6 +41,22 @@ function ItemDialog({ item, project, onClose, onDone }) {
   );
 }
 
+function Signoff({ g, project, onDone }) {
+  const [remarks, setRemarks] = useState("");
+  const [open, setOpen] = useState(false);
+  const ready = g.items.every((i) => i.status === "pass" || i.status === "na");
+  const save = async () => {
+    try { await api.post(`/projects/${project.id}/inspection/signoff`, { stage: g.stage, remarks }); toast.success("Stage signed off"); setOpen(false); onDone(); }
+    catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+  return (<>
+    <Button size="sm" disabled={!ready} onClick={() => setOpen(true)} data-testid="stage-signoff-btn">{ready ? "I approve this stage" : "Sign-off available when all items pass / N/A"}</Button>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Approve {g.stage}</DialogTitle></DialogHeader>
+      <Textarea rows={3} placeholder="Remarks (optional)" value={remarks} onChange={(e) => setRemarks(e.target.value)} data-testid="signoff-remarks-input" />
+      <DialogFooter><Button onClick={save} data-testid="signoff-confirm-btn">I approve</Button></DialogFooter></DialogContent></Dialog>
+  </>);
+}
+
 export function InspectionTab({ project, role }) {
   const [d, setD] = useState(null);
   const [sel, setSel] = useState(null);
@@ -70,8 +86,13 @@ export function InspectionTab({ project, role }) {
           return (
             <AccordionItem key={g.stage} value={g.stage} className="rounded-xl border bg-card px-4" data-testid="inspection-stage">
               <AccordionTrigger className="hover:no-underline"><div className="flex flex-1 items-center justify-between pr-3"><span className="font-medium">{g.stage}</span>
-                <span className="flex gap-2 text-xs">{fails > 0 && <Badge className="bg-rose-600 text-white">{fails} fail</Badge>}<Badge variant="secondary">{ok}/{g.items.length}</Badge></span></div></AccordionTrigger>
-              <AccordionContent><div className="divide-y">{g.items.map((i) => (
+                <span className="flex gap-2 text-xs">{g.signoff && <Badge className="bg-emerald-600 text-white">Signed off</Badge>}{fails > 0 && <Badge className="bg-rose-600 text-white">{fails} fail</Badge>}<Badge variant="secondary">{ok}/{g.items.length}</Badge></span></div></AccordionTrigger>
+              <AccordionContent>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 p-2 text-xs" data-testid="stage-signoff">
+                  {g.signoff ? <span className="font-medium text-emerald-700" data-testid="stage-signed">Client approved by {g.signoff.signed_by_name} on {formatDateTime(g.signoff.signed_at)}{g.signoff.remarks ? ` — ${g.signoff.remarks}` : ""}</span>
+                    : <span className="text-muted-foreground">Awaiting client sign-off</span>}
+                  {!g.signoff && role === "client" && <Signoff g={g} project={project} onDone={load} />}</div>
+                <div className="divide-y">{g.items.map((i) => (
                 <div key={i.id} className="flex flex-wrap items-start justify-between gap-2 py-3" data-testid="inspection-item">
                   <div className="min-w-0 flex-1"><div className="text-sm">{i.item}</div>
                     {(i.remarks || i.responsible_name) && <div className="text-xs text-muted-foreground">{i.remarks}{i.responsible_name ? ` · Responsible: ${i.responsible_name}` : ""}</div>}

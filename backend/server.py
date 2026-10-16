@@ -37,7 +37,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("civio")
 
 MANAGER_ROLES = {"admin", "project_manager"}
-ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "site_engineer": "Site Engineer", "client": "Client"}
+ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "site_engineer": "Site Engineer", "client": "Client",
+              "safety_engineer": "Safety Engineer", "safety_manager": "Safety Manager", "quality_engineer": "Quality Engineer",
+              "quality_manager": "Quality Manager", "store_incharge": "Store In-charge", "store_manager": "Store Manager",
+              "billing_qs": "Billing / QS / Documents", "billing_manager": "Billing Manager", "pass_coordinator": "Pass Coordinator",
+              "driver": "Driver"}
+APPROVER = {"site_engineer": "project_manager", "safety_engineer": "safety_manager", "quality_engineer": "quality_manager",
+            "store_incharge": "store_manager", "billing_qs": "billing_manager", "pass_coordinator": "project_manager",
+            "driver": "project_manager", "project_manager": "admin", "safety_manager": "admin", "quality_manager": "admin",
+            "store_manager": "admin", "billing_manager": "admin"}
+COMMERCIAL_ONLY_ROLES = set(ROLE_NAMES) - {"admin", "project_manager", "site_engineer", "client"}
 DEFAULT_ENTERPRISE_ID = "civio"
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
@@ -205,7 +214,7 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
     role = user["role"]
     uid = user["id"]
     allowed = False
-    if role == "admin":
+    if role in {"admin", "store_incharge", "store_manager"}:
         allowed = True
     elif role == "project_manager":
         allowed = project.get("project_manager_id") == uid or project.get("created_by") == uid
@@ -213,7 +222,7 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
         allowed = uid in project.get("engineer_ids", [])
     elif role == "client":
         allowed = project.get("client_id") == uid and not write
-    if not allowed and not write and role != "client":
+    if not allowed and role != "client":
         allowed = bool(await db.project_members.find_one({"project_id": project_id, "user_id": uid}))
     if not allowed:
         raise HTTPException(status_code=403, detail="You cannot access this project.")
@@ -750,10 +759,12 @@ async def list_users(role: Optional[str] = None, user: dict = Depends(require_ro
 
 @api_router.post("/users")
 async def create_user(body: UserCreateIn, user: dict = Depends(require_roles("admin", "project_manager"))):
-    if body.role not in {"site_engineer", "client", "project_manager"}:
+    if body.role not in set(ROLE_NAMES) - {"admin"}:
         raise HTTPException(status_code=400, detail="Invalid role.")
-    if body.role == "project_manager" and user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Only an admin can add project managers.")
+    if body.role in COMMERCIAL_ONLY_ROLES and user["_enterprise"].get("business_type") != "commercial":
+        raise HTTPException(status_code=400, detail="This role is available in the Commercial workspace only.")
+    if APPROVER.get(body.role) == "admin" and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only an admin can add managers.")
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
@@ -797,6 +808,8 @@ async def list_projects(user: dict = Depends(get_current_user)):
         q["engineer_ids"] = uid
     elif role == "client":
         q["client_id"] = uid
+    elif role not in {"admin", "store_incharge", "store_manager"}:
+        q["id"] = {"$in": [m["project_id"] async for m in db.project_members.find({"user_id": uid}, {"_id": 0, "project_id": 1})]}
     projects = await db.projects.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for p in projects:
         await enrich_project(p)
@@ -1953,6 +1966,8 @@ import residential  # noqa: E402
 import inspection  # noqa: E402
 api_router.include_router(residential.router)
 api_router.include_router(inspection.router)
+import phase2  # noqa: E402
+api_router.include_router(phase2.router)
 
 
 async def migrate_multitenant():
@@ -1988,6 +2003,7 @@ async def migrate_multitenant():
     await db.attendance.create_index([("project_id", 1), ("user_id", 1), ("date", 1)], unique=True)
     await db.digest_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
     await db.login_attempts.create_index("identifier")
+    await store_module.migrate_company_stock()
     await db.labour_cost_logs.create_index([("company_id", 1), ("key", 1)], unique=True)
     await db.tool_reminders.create_index([("request_id", 1), ("date", 1)], unique=True)
     await db.push_subscriptions.create_index("endpoint", unique=True)

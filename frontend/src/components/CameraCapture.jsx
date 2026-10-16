@@ -3,6 +3,7 @@ import { api, apiError, fileUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Upload, Loader2, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 // Camera-first capture: live camera → capture → preview → retake / upload (with retry). Gallery only if camera is unavailable.
 export function CameraCapture({ projectId, value = [], onChange, label = "Photos", max = 6 }) {
@@ -10,6 +11,8 @@ export function CameraCapture({ projectId, value = [], onChange, label = "Photos
   const stream = useRef(null);
   const [mode, setMode] = useState("idle"); // idle | live | preview | uploading | fallback
   const [blob, setBlob] = useState(null);
+  const { user } = useAuth();
+  const cameraOnly = user?.enterprise?.business_type === "commercial";
   const stop = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
   useEffect(() => stop, []);
   const open = async () => {
@@ -17,7 +20,10 @@ export function CameraCapture({ projectId, value = [], onChange, label = "Photos
       stream.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
       setMode("live");
       setTimeout(() => { if (video.current) { video.current.srcObject = stream.current; video.current.play(); } }, 0);
-    } catch { setMode("fallback"); toast.message("Camera unavailable or permission denied — choose a photo from your device instead."); }
+    } catch {
+      if (cameraOnly) { setMode("blocked"); toast.error("Camera access is required. Allow camera permission in your browser settings, then tap Try again."); }
+      else { setMode("fallback"); toast.message("Camera unavailable or permission denied — choose a photo from your device instead."); }
+    }
   };
   const snap = () => {
     const v = video.current, c = document.createElement("canvas");
@@ -42,6 +48,9 @@ export function CameraCapture({ projectId, value = [], onChange, label = "Photos
         <div className="flex gap-2"><Button type="button" disabled={mode === "uploading"} onClick={() => upload(new File([blob], `site_${Date.now()}.jpg`, { type: "image/jpeg" }))} data-testid="camera-upload-btn">
           {mode === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload / Retry</Button>
           <Button type="button" variant="outline" onClick={() => { setBlob(null); open(); }} data-testid="camera-retake-btn"><RotateCcw className="h-4 w-4" /> Retake</Button></div></div>}
+      {mode === "blocked" && <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" data-testid="camera-blocked">
+        Camera access is required for this photo — gallery upload is not allowed. Allow camera permission for this site, then try again.
+        <div><Button type="button" size="sm" variant="outline" onClick={open} data-testid="camera-retry-btn"><Camera className="h-4 w-4" /> Try again</Button></div></div>}
       {mode === "fallback" && <label className="inline-flex"><input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files[0] && upload(e.target.files[0])} data-testid="camera-fallback-input" />
         <Button type="button" asChild size="sm" variant="outline"><span><ImagePlus className="h-4 w-4" /> Choose from gallery</span></Button></label>}
       {value.length > 0 && <div className="grid grid-cols-4 gap-2">{value.map((id) => (

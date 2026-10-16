@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { TargetsPanel } from "@/pages/project/TargetsPanel";
 import { api, apiError, API, getToken } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -89,6 +91,8 @@ function BoqPanel({ project, manages }) {
 }
 
 export function DprTab({ project, userId, perms, manages, initialDpr }) {
+  const { user } = useAuth();
+  const commercialWs = user?.enterprise?.business_type === "commercial";
   const [list, setList] = useState([]);
   const [sel, setSel] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -102,6 +106,7 @@ export function DprTab({ project, userId, perms, manages, initialDpr }) {
       <div className="flex items-center justify-between"><h2 className="font-heading text-lg font-semibold">Daily Progress Reports</h2>
         {can(perms, "create") && <Button onClick={() => setEditing({})} data-testid="new-dpr-btn"><Plus className="h-4 w-4" /> New DPR</Button>}</div>
       <BoqPanel project={project} manages={manages} />
+      {commercialWs && <TargetsPanel project={project} manages={manages} />}
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         <Card className="divide-y">
           {list.length === 0 && <p className="p-4 text-sm text-muted-foreground">No DPRs yet.</p>}

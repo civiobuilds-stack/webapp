@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { UserPlus, Loader2, HardHat, User, Briefcase, Copy, Check } from "lucide-react";
+import { UserPlus, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { InviteDialog, InviteList } from "@/components/InvitePanel";
 import { EmployeesPanel } from "@/components/EmployeesPanel";
@@ -84,11 +83,9 @@ function AddPersonDialog({ isAdmin, onCreated }) {
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   };
 
-  const roles = [
-    { v: "site_engineer", l: "Site Engineer", icon: HardHat },
-    { v: "client", l: "Client", icon: User },
-    ...(isAdmin ? [{ v: "project_manager", l: "Project Manager", icon: Briefcase }] : []),
-  ];
+  const [roles, setRoles] = useState([]);
+  useEffect(() => { if (open) api.get("/roles").then((r) => setRoles(r.data.filter((x) => isAdmin || !x.admin_only))).catch(() => {}); }, [open, isAdmin]);
+  const sel = roles.find((r) => r.key === form.role);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
@@ -99,14 +96,9 @@ function AddPersonDialog({ isAdmin, onCreated }) {
             <DialogHeader><DialogTitle>Create an account</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-1.5"><Label>Role</Label>
-                <RadioGroup value={form.role} onValueChange={(v) => setForm({ ...form, role: v })} className={`grid gap-2 ${roles.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-                  {roles.map((r) => (
-                    <label key={r.v} className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border bg-card px-2 py-3 text-center text-xs has-[:checked]:border-primary has-[:checked]:bg-primary/5" data-testid={`person-role-${r.v}`}>
-                      <RadioGroupItem value={r.v} className="sr-only" />
-                      <r.icon className="h-5 w-5" /> {r.l}
-                    </label>
-                  ))}
-                </RadioGroup>
+                <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} data-testid="person-role-select">
+                  {roles.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select>
+                {sel?.approver_label && <p className="text-xs text-muted-foreground" data-testid="person-role-approver">Approvals go to: {sel.approver_label}</p>}
               </div>
               <div className="space-y-1.5"><Label>Full name</Label><Input value={form.name} onChange={set("name")} data-testid="person-name-input" /></div>
               <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} data-testid="person-email-input" /></div>

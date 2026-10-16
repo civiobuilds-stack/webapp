@@ -91,6 +91,9 @@ async def get_inspection(pid: str, user: dict = Depends(S.get_current_user)):
     p = await S.get_project_or_403(pid, user)
     await _seed(pid, p["company_id"])
     stages, summary = _group(await _items(pid))
+    so = await _signoffs(pid)
+    for g in stages:
+        g["signoff"] = so.get(g["stage"])
     return {"stages": stages, "summary": summary}
 
 
@@ -176,6 +179,36 @@ async def remove_doc(did: str, user: dict = Depends(S.require_roles("admin", "pr
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+class SignoffIn(BaseModel):
+    stage: str
+    remarks: str = Field(default="", max_length=1000)
+
+
+@router.post("/projects/{pid}/inspection/signoff")
+async def signoff(pid: str, body: SignoffIn, user: dict = Depends(S.require_roles("client"))):
+    _mod(user)
+    p = await S.get_project_or_403(pid, user)
+    items = await S.db.inspection_items.find({"project_id": pid, "stage": body.stage}, {"_id": 0, "status": 1}).to_list(500)
+    if not items:
+        raise HTTPException(status_code=404, detail="Stage not found")
+    if any(i["status"] not in {"pass", "na"} for i in items):
+        raise HTTPException(status_code=400, detail="Every item in this stage must be Pass or N/A before sign-off.")
+    if await S.db.inspection_signoffs.find_one({"project_id": pid, "stage": body.stage}):
+        raise HTTPException(status_code=409, detail="This stage is already signed off.")
+    doc = {"id": S.new_id(), "project_id": pid, "company_id": p["company_id"], "stage": body.stage, "remarks": body.remarks,
+           "signed_by": user["id"], "signed_by_name": user["name"], "signed_at": S.now_iso()}
+    await S.db.inspection_signoffs.insert_one(doc)
+    doc.pop("_id", None)
+    await S.log_audit(pid, user, "client signed off inspection stage", "inspection", doc["id"], f"{body.stage}: {body.remarks}")
+    if p.get("project_manager_id"):
+        await S.notify(p["project_manager_id"], "inspection", f"{user['name']} signed off inspection stage '{body.stage}'.", pid, link=f"/projects/{pid}?tab=inspection", push=True)
+    return doc
+
+
+async def _signoffs(pid):
+    return {s["stage"]: s for s in await S.db.inspection_signoffs.find({"project_id": pid}, {"_id": 0}).to_list(100)}
+
+
 @router.post("/projects/{pid}/inspection/report")
 async def inspection_report(pid: str, user: dict = Depends(S.require_roles("admin", "project_manager", "client"))):
     _mod(user)
@@ -191,6 +224,9 @@ async def inspection_report(pid: str, user: dict = Depends(S.require_roles("admi
     data = {f: g[0] for f, g in zip(order, got) if not isinstance(g, Exception)}
     photos = [(data[f], f"{i['item'][:40]} — {i['status'].upper()}", files[f]["created_at"]) for i in shot for f in i["photo_ids"] if f in data]
     stages, summary = _group(items)
+    so = await _signoffs(pid)
+    for g in stages:
+        g["signoff"] = so.get(g["stage"])
     rev = await S.db.reports.count_documents({"project_id": pid, "type": "inspection"})
     revision = f"INS-{rev + 1:02d}"
     ent = user["_enterprise"]

@@ -5,6 +5,7 @@ import { DprTab } from "@/pages/project/DprTab";
 import { AttendanceTab } from "@/pages/project/AttendanceTab";
 import { MembersTab } from "@/pages/project/MembersTab";
 import { StoreTab } from "@/pages/project/StoreTab";
+import { PassesTab } from "@/pages/project/PassesTab";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate, isManager } from "@/lib/format";
@@ -99,6 +100,7 @@ export default function ProjectDetail() {
           {commercial && perm && <TabsTrigger value="attendance" data-testid="tab-attendance">Attendance</TabsTrigger>}
           {commercial && perm && <TabsTrigger value="store" data-testid="tab-store">Store</TabsTrigger>}
           {commercial && perm && <TabsTrigger value="members" data-testid="tab-members">Members</TabsTrigger>}
+          {commercial && perm && <TabsTrigger value="passes" data-testid="tab-passes">Site Passes</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="mt-5">
@@ -118,7 +120,8 @@ export default function ProjectDetail() {
           <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} initialDpr={searchParams.get("dpr")} /></TabsContent>
           <TabsContent value="attendance" className="mt-5"><AttendanceTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} /></TabsContent>
           <TabsContent value="members" className="mt-5"><MembersTab project={project} meta={perm} /></TabsContent>
-          <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} /></TabsContent>
+          <TabsContent value="passes" className="mt-5"><PassesTab project={project} role={user.role} manages={perm.manages} /></TabsContent>
+          <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} meta={perm} /></TabsContent>
         </>}
       </Tabs>
     </div>

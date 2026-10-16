@@ -12,6 +12,7 @@ import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
+import CompanyStore from "@/pages/CompanyStore";
 import People from "@/pages/People";
 import Notifications from "@/pages/Notifications";
 import Landing from "@/pages/Landing";
@@ -70,6 +71,7 @@ function AppRouter() {
       <Route path="/projects" element={<Shell><Projects /></Shell>} />
       <Route path="/projects/:id" element={<Shell><ProjectDetail /></Shell>} />
       <Route path="/people" element={<Shell><People /></Shell>} />
+      <Route path="/store" element={<Shell><CompanyStore /></Shell>} />
       <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
       <Route path="/superadmin" element={<ProtectedRoute><SuperAdminRoute><AppShell><SuperAdmin /></AppShell></SuperAdminRoute></ProtectedRoute>} />
     </Routes>

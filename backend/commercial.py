@@ -67,6 +67,8 @@ async def perms_for(user, project) -> Dict[str, List[str]]:
         return ENGINEER_DEFAULT
     if user["role"] == "client" and project.get("client_id") == user["id"]:
         return {"dpr": ["view"]}
+    if user["role"] in {"store_incharge", "store_manager"}:
+        return {"store": ["view", "export"]}
     return {}
 
 
@@ -201,7 +203,7 @@ async def list_members(pid: str, user: dict = Depends(commercial_user)):
 async def my_permissions(pid: str, user: dict = Depends(dpr_user)):
     project = await S.get_project_or_403(pid, user)
     return {"permissions": await perms_for(user, project), "manages": _manages(user, project),
-            "modules": PERM_MODULES, "actions": ACTIONS}
+            "modules": PERM_MODULES, "actions": ACTIONS, "store_staff": user["role"] in {"store_incharge", "store_manager", "admin"}}
 
 
 @router.put("/projects/{pid}/members/{uid}")
