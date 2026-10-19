@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Send, FileText, PenLine, Check, MessageSquare, X } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +41,7 @@ function QuoteEditor({ project, quote, mode, onClose, onDone }) {
       <DialogHeader><DialogTitle>{mode === "new" ? "New quotation" : mode === "edit" ? `Edit ${quote.number} R${quote.current_rev}` : `New revision R${quote.current_rev + 1} — ${quote.number}`}</DialogTitle></DialogHeader>
       <div className="space-y-3">
         <div className="space-y-1"><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Interiors — Phase 1" data-testid="quote-title-input" /></div>
+        <div className="hidden grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground sm:grid"><span className="col-span-5">Description</span><span className="col-span-2">Unit</span><span className="col-span-2">Qty</span><span className="col-span-2">Rate (₹)</span></div>
         <div className="space-y-2">{f.items.map((it, i) => (
           <div key={i} className="grid grid-cols-12 gap-2" data-testid="quote-item-row">
             <Input className="col-span-12 sm:col-span-5" placeholder="Description" value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} data-testid={`quote-item-desc-${i}`} />
@@ -81,7 +83,7 @@ function RespondDialog({ quote, action, onClose, onDone }) {
         <p className="text-sm text-muted-foreground">You are accepting {quote.number} R{quote.current_rev} for <b>{formatINR(quote.revisions.at(-1).total)}</b>. Type your full name as your electronic signature.</p>
         <Input value={sig} onChange={(e) => setSig(e.target.value)} placeholder="Your full name" data-testid="quote-signature-input" />
         {sig && <div className="rounded-md border bg-muted/40 p-3 text-center font-serif text-2xl italic" data-testid="quote-signature-preview">{sig}</div>}
-        <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} data-testid="quote-agree-checkbox" />I agree that this typed name is my legally binding signature for this quotation.</label>
+        <label className="flex items-start gap-2 text-xs"><Checkbox checked={agree} onCheckedChange={(v) => setAgree(!!v)} data-testid="quote-agree-checkbox" />I agree that this typed name is my legally binding signature for this quotation.</label>
         <Textarea rows={2} placeholder="Comment (optional)" value={comment} onChange={(e) => setComment(e.target.value)} />
       </div> : <Textarea rows={3} placeholder="Tell the team what to change (required)" value={comment} onChange={(e) => setComment(e.target.value)} data-testid="quote-comment-input" />}
       <DialogFooter><Button onClick={go} disabled={accept ? sig.trim().length < 3 || !agree : !comment.trim()} data-testid="quote-respond-confirm">{accept ? "Sign & accept" : "Send"}</Button></DialogFooter>

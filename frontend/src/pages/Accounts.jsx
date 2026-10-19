@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { BillRow, BillActions, BILL_STATUS } from "@/pages/project/BillingTab";
 import { TripCard, tripAction } from "@/pages/project/VehiclesTab";
 import { Plus, Pencil } from "lucide-react";
+import { ReasonDialog } from "@/components/ReasonDialog";
 import { toast } from "sonner";
 
 function BillsPanel({ user }) {
@@ -95,13 +96,15 @@ function FleetPanel() {
   const [trips, setTrips] = useState([]);
   const [vdlg, setVdlg] = useState(null);
   const [assign, setAssign] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
   const load = () => {
     api.get("/vehicles").then((r) => setVehicles(r.data)).catch(() => {});
     api.get("/drivers").then((r) => setDrivers(r.data)).catch(() => {});
     api.get("/vehicle-requests").then((r) => setTrips(r.data)).catch(() => {});
   };
   useEffect(load, []);
-  const reject = async (t) => { const r = window.prompt("Reason for rejecting this request?"); if (r && await tripAction(t.id, "reject", r)) load(); };
+  const reject = (t) => setRejecting(t);
+  const doReject = async (r) => { const t = rejecting; setRejecting(null); if (await tripAction(t.id, "reject", r)) load(); };
   return (
     <div className="grid gap-5 lg:grid-cols-3">
       <div className="space-y-3 lg:col-span-2">
@@ -127,6 +130,7 @@ function FleetPanel() {
         <Card className="divide-y">{drivers.length === 0 ? <p className="p-4 text-sm text-muted-foreground">Add drivers from People (role: Driver).</p> :
           drivers.map((d) => <div key={d.id} className="p-3 text-sm" data-testid="driver-row">{d.name} <span className="text-xs text-muted-foreground">{d.phone}</span></div>)}</Card>
       </div>
+      {rejecting && <ReasonDialog title="Reject vehicle request" testid="trip-reject" onClose={() => setRejecting(null)} onConfirm={doReject} />}
       {vdlg && <VehicleDialog v={vdlg.v} onClose={() => setVdlg(null)} onDone={() => { setVdlg(null); load(); }} />}
       {assign && <AssignDialog trip={assign} vehicles={vehicles} drivers={drivers} onClose={() => setAssign(null)} onDone={() => { setAssign(null); load(); }} />}
     </div>

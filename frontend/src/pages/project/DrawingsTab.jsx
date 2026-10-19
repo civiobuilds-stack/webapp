@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { FileAttach } from "@/components/FileAttach";
+import { ReasonDialog } from "@/components/ReasonDialog";
 import { Upload, Check, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -63,13 +64,14 @@ export function DrawingsTab({ project, user, manages }) {
   const [rows, setRows] = useState([]);
   const [up, setUp] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [rejecting, setRejecting] = useState(null);
   const load = () => api.get(`/projects/${project.id}/drawings`).then((r) => setRows(r.data)).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [project.id]);
   const canUploadAny = manages || !!FIXED[user.role];
   const canUpload = (d) => manages || FIXED[user.role] === d.discipline;
-  const decide = async (d, action) => {
-    const remarks = action === "reject" ? window.prompt("Reason for rejecting?") : "";
-    if (action === "reject" && !remarks) return;
+  const decide = (d, action) => (action === "reject" ? setRejecting(d) : send(d, action, ""));
+  const send = async (d, action, remarks) => {
+    setRejecting(null);
     try { await api.post(`/drawings/${d.id}/decision`, { action, remarks }); toast.success(action === "approve" ? "Approved — visible to client" : "Rejected"); load(); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
@@ -86,6 +88,7 @@ export function DrawingsTab({ project, user, manages }) {
         {shown.length === 0 && <p className="p-4 text-sm text-muted-foreground">No drawings yet.</p>}
         {shown.map((d) => <DrawingRow key={d.id} d={d} manages={manages} canUpload={canUpload(d)} onDecide={decide} onRevise={(x) => setUp({ prefill: x })} />)}
       </Card>
+      {rejecting && <ReasonDialog title={`Reject ${rejecting.drawing_no} R${rejecting.rev}`} testid="drawing-reject" onClose={() => setRejecting(null)} onConfirm={(r) => send(rejecting, "reject", r)} />}
       {up && <UploadDialog project={project} role={user.role} prefill={up.prefill} onClose={() => setUp(null)} onDone={() => { setUp(null); load(); }} />}
     </div>
   );

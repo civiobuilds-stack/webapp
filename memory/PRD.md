@@ -160,3 +160,15 @@ I. Material requests: REMOVE client approval (user confirmed) → Engineer→PM/
 J. Inventory + Accounts role + Billing dashboard, dual PM+Owner invoice approval (shared with Commercial G).
 K. Client Access Settings (shared with Commercial I) incl. drawings, quotations.
 L. Photo persistence/preview + mobile nav.
+
+## Implemented (2026-06, Stage 9 — Billing, Vehicles, Permissions, Quotations, Drawings) ✅
+- Commercial **Accounts** role + project **Billing** tab: Accounts submits bill → PM approves → Owner approves (strict order) → Accounts/Owner marks paid. Rejection needs a reason; rejected bills can be corrected and resubmitted. Duplicate vendor+bill no. blocked. Company-wide `/accounts` (Billing & Fleet).
+- **Vehicles**: Accounts/Owner manage the fleet, assign vehicle + driver to requests (clash check for same date/time, maintenance vehicles blocked); driver gets a push and Start/Complete on `/trips`.
+- **Permissions**: per-module level (No Access/View/Create/Edit/Approve/Delete) + fine-tune checkboxes; new modules billing & vehicles; mobile project menu dropdown; members/team search + pagination.
+- Residential **Quotations**: numbered QT-…, revisions R1/R2…, branded PDF per revision, client accept with typed-name e-signature + agreement (IP/time stored) / request changes / reject. Visible to Owner, PM and client only.
+- Residential **Drawings**: Architect (architectural) / Structural Engineer (structural) upload → Owner/PM approve/reject → client sees only approved; new approved revision supersedes the old one. Design dashboard for both roles.
+- Files: backend/billing.py, backend/quotations.py, reports.build_quotation. Tested iteration_12 (17/17 backend, all frontend flows).
+
+## Backlog
+- P1: Ledger / payment reports export for Accounts (CSV/PDF), vehicle trip logs (km, fuel).
+- P2: Drawing markup comments; quotation → BOQ conversion on acceptance; backend refactor of server.py.

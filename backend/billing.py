@@ -134,6 +134,8 @@ async def resubmit_bill(bid: str, body: BillIn, user: dict = Depends(billing_use
     if b["status"] != "rejected":
         raise HTTPException(status_code=400, detail="Only rejected bills can be corrected and resubmitted.")
     await _check_files(b["project_id"], body.file_ids)
+    if await S.db.bills.find_one({"company_id": user["company_id"], "vendor_name": body.vendor_name.strip(), "bill_no": body.bill_no.strip(), "id": {"$ne": bid}}):
+        raise HTTPException(status_code=409, detail="This vendor bill number is already recorded.")
     upd = {**body.model_dump(), "total": round(body.amount + body.gst_amount, 2), "status": "pending_pm", "updated_at": S.now_iso()}
     await S.db.bills.update_one({"id": bid}, {"$set": upd, "$push": {"history": _hist("pending_pm", user, "Corrected and resubmitted")}})
     return await _bill(bid, user)
@@ -180,7 +182,9 @@ async def mark_paid(bid: str, body: BillPaid, user: dict = Depends(billing_user)
     await S.get_project_or_403(b["project_id"], user)
     if b["status"] != "approved":
         raise HTTPException(status_code=400, detail="Only fully approved bills (PM + Owner) can be marked paid.")
-    await S.db.bills.update_one({"id": bid}, {"$set": {"status": "paid", **body.model_dump()}, "$push": {"history": _hist("paid", user, body.payment_ref)}})
+    res = await S.db.bills.update_one({"id": bid, "status": "approved"}, {"$set": {"status": "paid", **body.model_dump()}, "$push": {"history": _hist("paid", user, body.payment_ref)}})
+    if not res.modified_count:
+        raise HTTPException(status_code=409, detail="This bill was already marked paid.")
     await S.log_audit(b["project_id"], user, "bill paid", "bill", bid, f"{b['ref_no']} {body.payment_ref}")
     return await _bill(bid, user)
 
@@ -290,7 +294,8 @@ async def request_vehicle(pid: str, body: TripIn, user: dict = Depends(vehicles_
 async def all_trips(status: Optional[str] = Query(None), user: dict = Depends(vehicles_user)):
     _fleet_admin(user)
     q = {"company_id": user["company_id"], **({"status": status} if status else {})}
-    return await S.db.vehicle_requests.find(q, {"_id": 0}).sort([("trip_date", -1), ("trip_time", -1)]).to_list(2000)
+    rows = await S.db.vehicle_requests.find(q, {"_id": 0}).sort([("trip_date", -1), ("trip_time", -1)]).to_list(2000)
+    return sorted(rows, key=lambda t: t["status"] != "requested")
 
 
 @router.get("/my-trips")

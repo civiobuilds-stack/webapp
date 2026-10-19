@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 12: Tested Commercial Billing (Accounts->PM->Owner->Paid), Vehicles/Drivers/Trips, per-module Permissions (levels + fine-tune), Members/Team search, mobile project dropdown menu, Residential Quotations (revisions, client e-sign, request changes/reject, PDF), Drawings (architect/structural upload, approval, supersede, client visibility), Design dashboard, role-creation guards, regression (login, super admin, DPR). Backend 17/17 new pytest tests pass (plus iter11 suite 25/25 when run serially; iter9/10 pass). All requested frontend flows work end-to-end. Only minor UX/code-review items found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/bills/{bid}", "issue": "Resubmit does not re-run the vendor+bill_no duplicate check, so a rejected bill can be edited into a duplicate of another bill (POST correctly returns 409)."},
+      {"endpoint": "POST /api/bills/{bid}/paid", "issue": "The update has no status guard ({id, status:'approved'}), so two concurrent requests can both mark a bill paid and append two history entries. decide_bill already guards this."},
+      {"endpoint": "GET /api/projects/{pid}/quotations", "issue": "Any project member (architect, structural engineer, site engineer) can list every quotation with pricing and client responses (only the client is filtered). Confirm this is intended; if not, limit it to managers + client."},
+      {"endpoint": "PUT /api/projects/{pid}/members/{uid}", "issue": "Adding an existing project engineer (in engineer_ids) as a member replaces their ENGINEER_DEFAULT permissions with the dialog default (dpr:view, attendance:create). They silently lose DPR create/submit and vehicle-request rights. Consider pre-filling the dialog with current effective perms."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Drawings tab (PM/Owner reject)", "issues": ["Reject uses the native window.prompt for remarks, which doesn't match the shadcn Dialog used for bill reject."]},
+      {"screen": "Quotation editor", "issues": ["'Valid until' uses the browser's native date input instead of the shadcn Calendar/Popover", "Line-item row inputs (unit/qty/rate) have no column labels; only placeholders/values show"]},
+      {"screen": "Quotation accept dialog", "issues": ["Agree checkbox is a native <input type=checkbox> instead of the shadcn Checkbox used elsewhere"]},
+      {"screen": "Bill form / Vehicle request form", "issues": ["Bill date, due date and trip date use native date inputs (not the shadcn calendar)"]},
+      {"screen": "Members perm dialog", "issues": ["Employee picker lists Owner/PM (who already have full access) and existing members", "Default attendance:['create'] shows as 'Custom' level, which may confuse users"]},
+      {"screen": "Accounts > Vehicles & Drivers", "issues": ["Requests are sorted by trip_date desc only, so open 'requested' items aren't pinned on top"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_billing_vehicles_quotes_iter12.py", "/app/test_reports/pytest/pytest_iter12.xml"],
+  "action_items": [
+    "(Optional) Add the duplicate vendor+bill_no check in PUT /bills/{bid} (exclude the bill itself)",
+    "(Optional) Add a status:'approved' filter to the mark_paid update_one and return 409 if not modified",
+    "Decide whether non-manager members (architect/structural/engineer) should see quotation pricing; restrict if not",
+    "Pre-fill the member permission dialog with the engineer's effective default perms so adding an engineer as a member doesn't downgrade them",
+    "Replace window.prompt in the DrawingsTab reject with a Dialog + Textarea; swap the native date inputs/checkbox for shadcn components"
+  ],
+  "critical_code_review_comments": [
+    "commercial.py is 815 lines (>700): consider splitting members/permissions out",
+    "billing.py: mark_paid has a race (no status filter on the update)",
+    "quotations.py: _quote hides draft-only quotes from clients via 404 (good). PDF for a client is limited to sent revisions (verified).",
+    "get_project_or_403 gives the accounts role access to every company project by design; confirm that is the business intent"
+  ],
+  "updated_files": ["/app/backend/tests/test_billing_vehicles_quotes_iter12.py"],
+  "success_rate": {"backend": "100% (17/17 new; regression suites pass when run serially)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Created TEST_/UI_ prefixed bills (BILL-00002..00008), vehicles MH01*/MH02*/MH04UI1636 (TEST Innova/Bolero/UI Tata Ace), vehicle requests in 2027 dates, quotations QT-CH-001-002..006 (UI_QUOTE Wardrobes accepted by 'Sunita Joshi'), drawings A-1215EB (R1 superseded/R2 approved), A-C3C234 (rejected), A-UI607 (approved), S-1215EB (rejected), S-C3C234. Temp member user-eng2 removed. reset_superadmin.py run; login_attempts cleared.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use test_billing_vehicles_quotes_iter12.py for regression (uses a random UID and a random 2027 trip date to avoid clashes). Note: in browser automation, a second full page.goto() in the same session sometimes triggers an Emergent 'Part of the app failed to load src/index.js' overlay, so use one login per script and navigate via nav links. Running the iter11 superadmin suite in parallel with other suites (xdist) causes 2 flaky failures (tenant suspend/expire state); run it with -n0.",
+  "rca of the issue": "No blocking bugs. Flaky iter11 failures come from cross-suite parallel interference (suspend/expire of shared tenants), not a product bug."
+}

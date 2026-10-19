@@ -62,7 +62,7 @@ export default function ProjectDetail() {
   const hasInspection = mods.includes("inspection");
   const resDpr = mods.includes("res_dpr") && perm;
   const hasMaterials = mods.includes("material_approval");
-  const hasQuotes = mods.includes("quotations");
+  const hasQuotes = mods.includes("quotations") && (user.role === "client" || user.role === "admin" || (user.role === "project_manager" && (project.project_manager_id === user.id || project.created_by === user.id)));
   const hasDrawings = mods.includes("drawings");
   const manages = user.role === "admin" || (user.role === "project_manager" && (project.project_manager_id === user.id || project.created_by === user.id));
   const can = (m) => perm && (perm.permissions?.[m] || []).includes("view") && mods.includes(m);

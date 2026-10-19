@@ -20,6 +20,7 @@ const LEVELS = {
   delete: { label: "Delete (full)", acts: ["view", "create", "submit", "edit", "approve", "export", "delete"] },
 };
 const PAGE = 10;
+const ENGINEER_DEFAULT = { dpr: ["view", "create", "edit", "submit"], attendance: ["view", "create"], store: ["view", "create"], vehicles: ["view", "create"] };
 const levelOf = (acts = []) => {
   const key = Object.keys(LEVELS).find((k) => LEVELS[k].acts.length === acts.length && LEVELS[k].acts.every((a) => acts.includes(a)));
   return key || "custom";
@@ -46,7 +47,7 @@ function PermDialog({ project, meta, member, employees, onClose, onDone }) {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{member ? "Edit member permissions" : "Assign employee to project"}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           {!member && <div className="space-y-1.5"><Label>Employee</Label>
-            <Select value={uid} onValueChange={setUid}><SelectTrigger data-testid="member-user-select"><SelectValue placeholder="Choose employee" /></SelectTrigger>
+            <Select value={uid} onValueChange={(v) => { setUid(v); if ((project.engineer_ids || []).includes(v)) setPerms({ ...ENGINEER_DEFAULT }); }}><SelectTrigger data-testid="member-user-select"><SelectValue placeholder="Choose employee" /></SelectTrigger>
               <SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name} · {e.designation || ROLE_LABEL[e.role]}</SelectItem>)}</SelectContent></Select></div>}
           <div className="space-y-1.5"><Label>Project responsibility</Label><Input value={resp} onChange={(e) => setResp(e.target.value)} placeholder="e.g. Structural supervisor, Block A" data-testid="member-responsibility-input" /></div>
           <div className="space-y-2">
@@ -110,7 +111,8 @@ export function MembersTab({ project, meta, onChanged }) {
         <Button size="sm" variant="outline" disabled={cur === 0} onClick={() => setPage(cur - 1)} data-testid="members-prev"><ChevronLeft className="h-4 w-4" /></Button>
         <span data-testid="members-page">Page {cur + 1} of {pages}</span>
         <Button size="sm" variant="outline" disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} data-testid="members-next"><ChevronRight className="h-4 w-4" /></Button></div>}
-      {dlg && <PermDialog project={project} meta={meta} member={dlg.user_id ? dlg : null} employees={employees} onClose={() => setDlg(null)} onDone={done} />}
+      {dlg && <PermDialog project={project} meta={meta} member={dlg.user_id ? dlg : null}
+        employees={employees.filter((e) => e.role !== "admin" && e.id !== project.project_manager_id && !members.some((m) => m.user_id === e.id))} onClose={() => setDlg(null)} onDone={done} />}
     </div>
   );
 }

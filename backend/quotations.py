@@ -84,7 +84,9 @@ def _client_view(q):
 
 @router.get("/projects/{pid}/quotations")
 async def list_quotes(pid: str, user: dict = Depends(quote_user)):
-    await S.get_project_or_403(pid, user)
+    project = await S.get_project_or_403(pid, user)
+    if user["role"] != "client" and not C._manages(user, project):
+        raise HTTPException(status_code=403, detail="Quotations are visible to the Owner, the project manager and the client only.")
     rows = await S.db.quotations.find({"project_id": pid}, {"_id": 0}).sort("created_at", -1).to_list(500)
     if user["role"] == "client":
         rows = [_client_view(q) for q in rows if any(r.get("sent_at") for r in q["revisions"])]
@@ -186,6 +188,8 @@ async def quote_pdf(qid: str, request: Request, rev: Optional[int] = Query(None)
     user = await S.user_from_query_token(request, auth)
     S.require_module(user, "quotations")
     q, project = await _quote(qid, user)
+    if user["role"] != "client" and not C._manages(user, project):
+        raise HTTPException(status_code=403, detail="Not allowed.")
     revs = _client_view(q)["revisions"] if user["role"] == "client" else q["revisions"]
     want = rev or (revs[-1]["rev"] if revs else 0)
     r = next((x for x in revs if x["rev"] == want), None)
