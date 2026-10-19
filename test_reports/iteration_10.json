@@ -1,0 +1,49 @@
+{
+  "summary": "Tested Commercial Phase 2 backend and frontend end to end, plus a residential regression. Backend: new pytest suite /app/backend/tests/test_phase2_commercial_iter10.py, 26/26 passed (run it with -n0). It covers the roles catalogue and approver labels; user creation (PM can create store_incharge/pass_coordinator/safety_engineer, gets 403 for the 4 manager roles; admin can create managers; residential company gets 400 for commercial roles); company store (receive, PM approve, store issue: missing photo 400, engineer 403, insufficient stock 409 with status shortage and shortage_qty, store_shortage notification to admin and store manager, partial issue within available stock, project inventory issued/on_site); 3-step tool return (stage order enforced, only store staff can receive, only PM/admin give final approval, company_stock available/issued_out/damaged updated); company store visibility (engineer can view but not edit, client 403); 7-day overdue reminder (issued_at backdated, tool_overdue notification to requester, PM and store in-charge, engineer gets 403 on remind-now); weekly targets (engineer 403 on PUT, achieved counts only approved DPRs, met flag, role dashboard); site passes (photo required, engineer 403, coordinator creates as pending, only PM approves, revoke works); residential inspection sign-off (400 while items are incomplete, non-client 403, 200 once all items pass, duplicate 409, signoff returned in GET, inspection report generates). Frontend (Playwright with a stubbed getUserMedia): Company Store page, receive dialog, stock/pending/shortage views; project Store tab issue with camera photo, shortage toast and store-shortage-badge, partial issue, Project inventory rows; tool return through all 3 steps in the UI; role dashboards for store/PM/pass coordinator/engineer with targets-overall red (0/1) and later green (1/1); TargetsPanel set target; PassesTab create/approve/revoke; client stage sign-off in the UI with the stage-signed text; People page role select and approver text (PM sees no manager roles); CameraCapture with camera denied: commercial shows camera-blocked and Try again with no fallback input, residential still shows the gallery fallback. One critical bug was found and fixed: store in-charge/manager saw 0 requests on the project Store tab.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/projects/{pid}/store/requests", "issue": "FIXED BY TESTER. Store In-charge and Store Manager have only store:['view','export'] project permissions, so the list was filtered to requested_by=self and they saw 0 requests. As a result store-issue-btn and store-return-receive-btn never rendered for store staff, even though the Company Store pending rows link to the project Store tab. Fix in store.py list_store_requests: skip the requested_by filter when user.role is in STORE_ROLES.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "store.apply_boq (DPR approve)", "issue": "Approving any DPR with BOQ entries overwrites project.progress_percent with BOQ-weighted progress. proj-demo-1 dropped from 43.5% (activity-weighted) to 1.2% after one small BOQ entry. Confirm this is intended, or keep boq_progress_percent separate."},
+      {"endpoint": "POST /api/projects/{pid}/passes", "issue": "pass_no comes from count_documents across both pass types: the first engineer pass became E0002. Numbers can collide if passes are deleted or created at the same time. There is no unique index. Use a per-type atomic counter."},
+      {"endpoint": "POST /api/store/requests/{id}/return", "issue": "Any user with store:create on the project (for example another engineer) can start a return on someone else's tool request. There is no requested_by or manager check."},
+      {"endpoint": "POST /api/projects/{pid}/inspection/signoff", "issue": "An existing sign-off is not invalidated if an item in that stage is later changed to fail or pending."},
+      {"endpoint": "phase2.role_dashboard tools_out", "issue": "Compares a naive datetime.now().isoformat() with UTC +00:00 strings. Use datetime.now(timezone.utc)."},
+      {"endpoint": "POST /api/store/requests/{id}/issue (409 detail)", "issue": "Message shows raw floats: '10.0 available, 40.0 bags short'. Cosmetic."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProjectDetail tabs for pass_coordinator", "issue": "Pass Coordinator sees every project tab (Activities, Progress, Inspection, Procurement, DPR, Attendance, Store, Members...). Store shows 'no store access' because the backend returns 403. Tabs should be scoped to the role (Overview + Site Passes).", "selector": "[role=tab]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PassesTab pass-card", "issues": ["When phone is empty the line starts with a stray '· Valid ...'"]},
+      {"screen": "InspectionTab (residential)", "issues": ["'Awaiting client sign-off' shows on stages whose items are all still pending. Show it only when the stage is ready."]},
+      {"screen": "People page", "issues": ["Subtitle still says 'Create and manage engineer and client accounts'. The page now covers all commercial roles."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_phase2_commercial_iter10.py", "/app/test_reports/pytest/pytest_iter10.xml"],
+  "action_items": [
+    "Keep the store.py list_store_requests fix (store roles see all project requests). Also consider giving store roles a proper project permission set.",
+    "Decide whether BOQ progress should overwrite project progress_percent (apply_boq).",
+    "Make site pass numbering atomic and per type.",
+    "Restrict tool return initiation to the requester or a manager.",
+    "Scope project tabs for pass_coordinator (and other non-site roles).",
+    "Update or delete the legacy tests. tests/test_store_boq_labour_iter7.py deletes ALL store_requests/boq/labour of proj-demo-1 (it wiped your 'Drill Machine' smoke request) and still expects the old per-project stock model. tests/test_commercial_iter7.py has an obsolete SA password flow, and TestResidentialScope expects residential DPR to be 403, but Phase 1 allows res_dpr now."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2043 lines and should be split into modules.",
+    "get_project_or_403 grants store_incharge/store_manager write access to every company project. This is intended for the company store, but it also lets them upload files or post to any project module that only checks project access.",
+    "receive_stock accepts no photo (the UI sends photo_ids: []). Fine if intended. Issue and return correctly require camera photos.",
+    "remind_overdue de-duplicates through a unique tool_reminders(request_id,date) index, so a second remind-now on the same day sends nothing. Tests must delete tool_reminders first."
+  ],
+  "updated_files": ["/app/backend/store.py (list_store_requests: store roles see all requests)", "/app/backend/tests/test_phase2_commercial_iter10.py (new)", "/app/backend/tests/test_commercial_iter7.py (SA_PASS updated to Civio@123456)"],
+  "success_rate": {"backend": "100% (26/26 new tests, after 1 fix); regression: iter9 residential all passed; commercial_iter7 7/8 (1 outdated expectation)", "frontend": "~95% (all requested flows verified; minor UX issues)"},
+  "seed_data_creation": "All TEST_ data was removed: store requests, company stock, transactions, BOQ, targets, DPR, passes, notifications and test users. Inspection items of proj-res-1 'Fixtures' were restored and the sign-off deleted. proj-demo-1 progress_percent was recomputed from activities (43.5). Superadmin was reset and login_attempts cleared.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run test_phase2_commercial_iter10.py with -n0 (classes share state). Headless camera: stub navigator.mediaDevices.getUserMedia with canvas.captureStream() via add_init_script. Logging in again within one Playwright session sometimes hits a transient 'Part of the app failed to load src/index.js' error from the preview environment, so use one login per browser_automation run. Do not run test_store_boq_labour_iter7.py: it is destructive and obsolete. Inspection stages are accordions: click the stage name to expand. pass@civio.build is a project member of proj-demo-1, while store users get access through their role.",
+  "rca of the issue": "Store staff saw no requests because list_store_requests used perms['store'] containing 'approve' as the 'see all' criterion. Store roles get only view/export through the project permission defaults, and they are not project members. Reproduce: log in as store@civio.build and GET /api/projects/proj-demo-1/store/requests, which returns [] while PM sees N. Mitigation (applied): treat STORE_ROLES as see-all."
+}

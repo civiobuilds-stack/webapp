@@ -7,12 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HardHat, Loader2 } from "lucide-react";
 
-const DEMO = [
-  { label: "Owner / Admin", email: "civiobuilds@gmail.com", password: "CivioAdmin@2026" },
-  { label: "Project Manager", email: "pm@civio.build", password: "CivioPM@2026" },
-  { label: "Site Engineer", email: "engineer@civio.build", password: "CivioEng@2026" },
-  { label: "Client", email: "client@civio.build", password: "CivioClient@2026" },
-];
 
 export default function Login() {
   const { login } = useAuth();
@@ -92,19 +86,6 @@ export default function Login() {
             New company? <Link to="/register" className="font-semibold text-primary hover:underline" data-testid="goto-register">Register your workspace</Link>
           </p>
 
-          <div className="mt-8 rounded-xl border bg-muted/40 p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Demo accounts (click to fill)</p>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO.map((d) => (
-                <button key={d.email} type="button" onClick={() => { setEmail(d.email); setPassword(d.password); }}
-                  data-testid={`demo-${d.label.split(" ")[0].toLowerCase()}`}
-                  className="rounded-lg border bg-card px-2.5 py-2 text-left text-xs transition-colors hover:border-primary">
-                  <div className="font-semibold text-foreground">{d.label}</div>
-                  <div className="truncate text-muted-foreground">{d.email}</div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

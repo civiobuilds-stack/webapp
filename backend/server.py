@@ -48,6 +48,8 @@ APPROVER = {"site_engineer": "project_manager", "safety_engineer": "safety_manag
             "store_manager": "admin", "billing_manager": "admin"}
 COMMERCIAL_ONLY_ROLES = set(ROLE_NAMES) - {"admin", "project_manager", "site_engineer", "client"}
 DEFAULT_ENTERPRISE_ID = "civio"
+BILLING_STATUSES = {"trial", "manual", "pending_payment", "overdue", "cancelled"}
+BILLING_PERIODS = {"monthly", "quarterly", "yearly"}
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
     "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store", "inspection"},
@@ -139,6 +141,9 @@ async def ensure_company_users(ids, user: dict):
 
 async def enforce_limit(user: dict, kind: str):
     ent = user.get("_enterprise") or {}
+    exp = ent.get("subscription_expires_at")
+    if exp and exp < datetime.now(timezone.utc).date().isoformat() and ent.get("id") != DEFAULT_ENTERPRISE_ID:
+        raise HTTPException(status_code=403, detail={"code": "subscription_expired", "message": "Your subscription has expired. Contact CIVIO to renew before adding more."})
     limits = ent.get("limits") or {}
     cid = user["company_id"]
     if kind == "users":
@@ -464,6 +469,8 @@ class SubscriptionIn(BaseModel):
     max_projects: Optional[int] = None
     max_storage_mb: Optional[int] = None
     billing_status: str = "manual"
+    billing_period: Optional[str] = None
+    subscription_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class InviteIn(BaseModel):
@@ -495,6 +502,7 @@ class PlanIn(BaseModel):
     max_projects: int = Field(ge=1)
     max_storage_mb: int = Field(ge=1)
     description: str = ""
+    billing_period: str = "monthly"
 
 
 def public_user(u: dict) -> dict:
@@ -1864,6 +1872,9 @@ async def enterprise_with_usage(e: dict) -> dict:
         "projects": await db.projects.count_documents({"company_id": cid, "is_archived": {"$ne": True}}),
         "storage_mb": await storage_used_mb(cid),
     }
+    exp, today = e.get("subscription_expires_at"), datetime.now(timezone.utc).date()
+    e["subscription_state"] = "no_expiry" if not exp else "expired" if exp < today.isoformat() else \
+        "expiring_soon" if exp <= (today + timedelta(days=14)).isoformat() else "active"
     return e
 
 
@@ -1904,7 +1915,8 @@ async def sa_set_status(eid: str, body: EnterpriseStatusIn, sa: dict = Depends(r
     update = {"status": body.status, "status_reason": body.reason or None, "status_updated_at": now_iso()}
     if body.status == "active" and not ent.get("approved_at"):
         update["approved_at"] = now_iso()
-    await db.enterprises.update_one({"id": eid}, {"$set": update})
+    await db.enterprises.update_one({"id": eid}, {"$set": update, "$push": {"status_history": {
+        "from": ent.get("status"), "to": body.status, "reason": body.reason, "by": sa["name"], "at": now_iso()}}})
     await platform_audit(sa, f"enterprise -> {body.status}", eid, body.reason)
     if ent.get("owner_id"):
         msg = {"active": f"Your workspace {ent['name']} is approved and active.",
@@ -1930,8 +1942,14 @@ async def sa_set_subscription(eid: str, body: SubscriptionIn, sa: dict = Depends
     if any(v < 1 for v in limits.values()):
         raise HTTPException(status_code=400, detail="Limits must be at least 1.")
     price = body.price_monthly if body.price_monthly is not None else plan["price_monthly"]
+    if body.billing_status not in BILLING_STATUSES:
+        raise HTTPException(status_code=400, detail="Billing status must be trial, manual, pending_payment, overdue or cancelled. 'Paid' needs a verified payment record.")
+    period = body.billing_period or plan.get("billing_period", "monthly")
+    if period not in BILLING_PERIODS:
+        raise HTTPException(status_code=400, detail="Billing period must be monthly, quarterly or yearly.")
     await db.enterprises.update_one({"id": eid}, {"$set": {
         "plan_id": plan["id"], "limits": limits, "price_monthly": max(price, 0), "billing_status": body.billing_status,
+        "billing_period": period, "subscription_expires_at": body.subscription_expires_at,
     }})
     await platform_audit(sa, "subscription updated", eid, f"{plan['name']} ₹{price} {limits}")
     return await enterprise_with_usage(await db.enterprises.find_one({"id": eid}, {"_id": 0}))
@@ -1944,6 +1962,8 @@ async def sa_list_plans(sa: dict = Depends(require_super_admin())):
 
 @api_router.put("/superadmin/plans/{plan_id}")
 async def sa_update_plan(plan_id: str, body: PlanIn, sa: dict = Depends(require_super_admin())):
+    if body.billing_period not in BILLING_PERIODS:
+        raise HTTPException(status_code=400, detail="Billing period must be monthly, quarterly or yearly.")
     res = await db.plans.update_one({"id": plan_id}, {"$set": body.model_dump()})
     if not res.matched_count:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -1966,6 +1986,8 @@ import residential  # noqa: E402
 import inspection  # noqa: E402
 api_router.include_router(residential.router)
 api_router.include_router(inspection.router)
+import superadmin  # noqa: E402
+api_router.include_router(superadmin.router)
 import phase2  # noqa: E402
 api_router.include_router(phase2.router)
 

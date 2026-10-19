@@ -1,5 +1,5 @@
 """Commercial Phase 2: role catalogue, role dashboards, weekly engineer BOQ targets, site passes (labour/engineer)."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -133,7 +133,8 @@ async def create_pass(pid: str, body: PassIn, user: dict = Depends(C.commercial_
         raise HTTPException(status_code=400, detail="Pass type must be labour or engineer and validity dates must be in order.")
     if not body.photo_ids or await S.db.files.count_documents({"id": {"$in": body.photo_ids}, "project_id": pid, "is_deleted": False}) != len(set(body.photo_ids)):
         raise HTTPException(status_code=400, detail="A camera photo of the pass holder is required.")
-    n = await S.db.site_passes.count_documents({"project_id": pid})
+    ctr = await S.db.counters.find_one_and_update({"id": f"pass-{pid}-{body.pass_type}"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    n = ctr["seq"] - 1
     mgr = C._manages(user, project)
     doc = {"id": S.new_id(), "company_id": user["company_id"], "project_id": pid, **body.model_dump(),
            "pass_no": f"{project.get('code', 'P')}-{'L' if body.pass_type == 'labour' else 'E'}{n + 1:04d}",
@@ -177,7 +178,7 @@ async def role_dashboard(user: dict = Depends(C.commercial_user)):
     pids = [p["id"] for p in await S.list_projects(user)]
     n = S.db.store_requests.count_documents
     cards = []
-    week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     if role in {"admin", "project_manager"}:
         cards += [{"key": "store_approve", "label": "Store requests to approve", "count": await n({"project_id": {"$in": pids}, "status": "requested"})},
                   {"key": "return_approve", "label": "Tool returns to approve", "count": await n({"project_id": {"$in": pids}, "pending_return.stage": "awaiting_pm"})},

@@ -14,7 +14,7 @@ function PlanCard({ plan, onSaved }) {
   const save = async () => {
     setBusy(true);
     try {
-      const body = { name: f.name, description: f.description || "" };
+      const body = { name: f.name, description: f.description || "", billing_period: f.billing_period || "monthly" };
       NUM.forEach(([k]) => { body[k] = Number(f[k]); });
       await api.put(`/superadmin/plans/${plan.id}`, body);
       toast.success(`${f.name} saved`);
@@ -32,6 +32,8 @@ function PlanCard({ plan, onSaved }) {
             <Input type="number" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`sa-plan-${plan.id}-${k}`} /></div>
         ))}
       </div>
+      <div className="space-y-1"><Label className="text-xs">Billing period</Label><select className="h-9 w-full rounded-md border bg-transparent px-2 text-sm" value={f.billing_period || "monthly"} onChange={(e) => setF({ ...f, billing_period: e.target.value })} data-testid={`sa-plan-${plan.id}-period`}>
+        {["monthly", "quarterly", "yearly"].map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
       <Button size="sm" className="w-full" onClick={save} disabled={busy} data-testid={`sa-plan-save-${plan.id}`}>Save plan</Button>
     </Card>
   );

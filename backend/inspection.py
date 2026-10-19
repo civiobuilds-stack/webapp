@@ -120,6 +120,10 @@ async def update_item(iid: str, body: ItemUpdate, user: dict = Depends(S.require
                  "inspected_by": user["id"], "inspected_at": ts},
         "$push": {"history": {"status": body.status, "by": user["name"], "at": ts, "remarks": body.remarks, "photos": len(ids)}}})
     await S.log_audit(it["project_id"], user, f"inspection {body.status}", "inspection", iid, f"{it['stage']}: {it['item']}")
+    if body.status not in {"pass", "na"}:
+        res = await S.db.inspection_signoffs.delete_one({"project_id": it["project_id"], "stage": it["stage"]})
+        if res.deleted_count:
+            await S.log_audit(it["project_id"], user, "client sign-off withdrawn (item changed)", "inspection", iid, it["stage"])
     return {"ok": True}
 
 

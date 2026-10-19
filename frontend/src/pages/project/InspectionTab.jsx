@@ -90,7 +90,7 @@ export function InspectionTab({ project, role }) {
               <AccordionContent>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 p-2 text-xs" data-testid="stage-signoff">
                   {g.signoff ? <span className="font-medium text-emerald-700" data-testid="stage-signed">Client approved by {g.signoff.signed_by_name} on {formatDateTime(g.signoff.signed_at)}{g.signoff.remarks ? ` — ${g.signoff.remarks}` : ""}</span>
-                    : <span className="text-muted-foreground">Awaiting client sign-off</span>}
+                    : g.items.every((i) => i.status === "pass" || i.status === "na") ? <span className="text-muted-foreground">Ready — awaiting client sign-off</span> : <span className="text-muted-foreground">Client sign-off once all items pass / N/A</span>}
                   {!g.signoff && role === "client" && <Signoff g={g} project={project} onDone={load} />}</div>
                 <div className="divide-y">{g.items.map((i) => (
                 <div key={i.id} className="flex flex-wrap items-start justify-between gap-2 py-3" data-testid="inspection-item">

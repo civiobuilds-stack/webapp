@@ -28,7 +28,7 @@ MONGO = MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
 DB = MONGO[os.environ.get("DB_NAME", "test_database")]
 
 SA_EMAIL = "civiobuilds@gmail.com"
-SA_PASS = "CivioAdmin@2026"
+SA_PASS = "Civio@123456"
 NEW_SA_PASS = "CivioAdmin@2026X"
 PM = ("pm@civio.build", "CivioPM@2026")
 ENG = ("engineer@civio.build", "CivioEng@2026")

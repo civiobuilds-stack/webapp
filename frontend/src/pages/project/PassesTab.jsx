@@ -55,7 +55,7 @@ export function PassesTab({ project, role, manages }) {
           {p.photo_ids?.[0] && <img src={fileUrl(p.photo_ids[0])} alt="" className="h-20 w-16 rounded-md object-cover" />}
           <div className="min-w-0 flex-1"><div className="flex items-center gap-2 font-mono text-xs"><BadgeCheck className="h-4 w-4" /> {p.pass_no}</div>
             <div className="font-medium">{p.person_name} <span className="text-xs capitalize text-muted-foreground">· {p.pass_type}{p.trade ? ` · ${p.trade}` : ""}</span></div>
-            <div className="text-xs text-muted-foreground">{p.phone} · Valid {formatDate(p.valid_from)} – {formatDate(p.valid_to)}</div>
+            <div className="text-xs text-muted-foreground">{p.phone ? `${p.phone} · ` : ""}Valid {formatDate(p.valid_from)} – {formatDate(p.valid_to)}</div>
             <div className="mt-2 flex flex-wrap gap-1"><Badge className={`${COLOR[p.status]} capitalize text-white`} data-testid="pass-status">{p.status}</Badge>
               {manages && p.status === "pending" && <><Button size="sm" className="h-6" onClick={() => act(p, "approve")} data-testid="pass-approve-btn">Approve</Button>
                 <Button size="sm" variant="outline" className="h-6" onClick={() => act(p, "reject")} data-testid="pass-reject-btn">Reject</Button></>}

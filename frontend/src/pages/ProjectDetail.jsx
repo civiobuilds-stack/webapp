@@ -57,6 +57,10 @@ export default function ProjectDetail() {
   const resDpr = mods.includes("res_dpr") && perm;
   const hasMaterials = mods.includes("material_approval");
 
+  if (user.role === "pass_coordinator") return (
+    <div className="space-y-6"><h1 className="font-heading text-2xl font-bold">{project.name} <span className="font-mono text-sm text-muted-foreground">{project.code}</span></h1>
+      <PassesTab project={project} role={user.role} manages={false} /></div>
+  );
   return (
     <div className="space-y-6">
       <button onClick={() => navigate("/projects")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="back-to-projects"><ArrowLeft className="h-4 w-4" /> Projects</button>

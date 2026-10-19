@@ -83,7 +83,7 @@ async def _txn(user, pid, ttype, item, kind, qty, photo_ids, person, request_id=
 async def list_store_requests(pid: str, user: dict = Depends(C.commercial_user)):
     _, perms = await C.require_perm(user, pid, "store", "view")
     q = {"project_id": pid}
-    if "approve" not in perms.get("store", []):
+    if "approve" not in perms.get("store", []) and user["role"] not in STORE_ROLES:
         q["requested_by"] = user["id"]
     return await S.db.store_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
@@ -177,7 +177,7 @@ async def issue_store_request(rid: str, body: IssueIn, user: dict = Depends(C.co
         await S.db.store_requests.update_one({"id": rid}, {"$set": {"status": "shortage", "shortage_qty": short, "shortage_at": S.now_iso()},
                                                            "$push": {"history": _hist(user, "shortage", f"{cur.get('available', 0)} available, {short} short. {body.note}")}})
         await _notify_shortage(user, r, project, short)
-        raise HTTPException(status_code=409, detail=f"Insufficient company stock: {cur.get('available', 0)} available, {short} {r['unit']} short. Owner has been notified.")
+        raise HTTPException(status_code=409, detail=f"Insufficient company stock: {cur.get('available', 0):g} available, {short:g} {r['unit']} short. Owner has been notified.")
     issued = r["issued_qty"] + body.quantity
     st = "issued" if issued >= r["quantity"] else "partially_issued"
     await S.db.store_requests.update_one({"id": rid}, {"$set": {"issued_qty": issued, "status": st, "issued_at": r.get("issued_at") or S.now_iso(), "shortage_qty": 0,
@@ -196,7 +196,9 @@ def _outstanding(r):
 @router.post("/store/requests/{rid}/return")
 async def init_return(rid: str, body: ReturnIn, user: dict = Depends(C.commercial_user)):
     r = await _req(rid, user)
-    await C.require_perm(user, r["project_id"], "store", "create")
+    project, _ = await C.require_perm(user, r["project_id"], "store", "create")
+    if r["requested_by"] != user["id"] and not C._manages(user, project):
+        raise HTTPException(status_code=403, detail="Only the requester or the project manager can start this return.")
     total = body.good + body.damaged + body.lost
     if r["kind"] != "tool" or r["status"] not in {"issued", "partially_issued", "partially_returned"}:
         raise HTTPException(status_code=400, detail="Only issued tools can be returned.")
@@ -375,7 +377,7 @@ async def apply_boq(pid, entries):
     total = sum(b["approved_qty"] for b in items)
     if total:
         pct = round(sum(min(b["accepted_qty"], b["approved_qty"]) for b in items) / total * 100, 1)
-        await S.db.projects.update_one({"id": pid}, {"$set": {"progress_percent": pct, "boq_progress_percent": pct}})
+        await S.db.projects.update_one({"id": pid}, {"$set": {"boq_progress_percent": pct}})
 
 
 # ---------------------------------------------------------------------------
