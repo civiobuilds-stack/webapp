@@ -1883,7 +1883,9 @@ async def sa_overview(sa: dict = Depends(require_super_admin())):
     ents = await db.enterprises.find({}, {"_id": 0}).to_list(10000)
     by_status = {s: sum(1 for e in ents if e.get("status") == s) for s in ("pending", "active", "suspended", "rejected")}
     by_type = {t: sum(1 for e in ents if e.get("business_type") == t) for t in MODULES}
-    mrr = sum(e.get("price_monthly") or 0 for e in ents if e.get("status") == "active")
+    today = datetime.now(timezone.utc).date().isoformat()
+    mrr = sum(e.get("price_monthly") or 0 for e in ents if e.get("status") == "active" and e.get("billing_status") not in {"trial", "cancelled"}
+              and not (e.get("subscription_expires_at") and e["subscription_expires_at"] < today))
     return {"enterprises": len(ents), "by_status": by_status, "by_type": by_type, "mrr": mrr,
             "users": await db.users.count_documents({}), "projects": await db.projects.count_documents({"is_archived": {"$ne": True}})}
 
@@ -1942,6 +1944,11 @@ async def sa_set_subscription(eid: str, body: SubscriptionIn, sa: dict = Depends
     if any(v < 1 for v in limits.values()):
         raise HTTPException(status_code=400, detail="Limits must be at least 1.")
     price = body.price_monthly if body.price_monthly is not None else plan["price_monthly"]
+    if body.subscription_expires_at:
+        try:
+            datetime.fromisoformat(body.subscription_expires_at)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Expiry must be a valid date.")
     if body.billing_status not in BILLING_STATUSES:
         raise HTTPException(status_code=400, detail="Billing status must be trial, manual, pending_payment, overdue or cancelled. 'Paid' needs a verified payment record.")
     period = body.billing_period or plan.get("billing_period", "monthly")

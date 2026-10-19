@@ -122,7 +122,7 @@ export default function SuperAdmin() {
         <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-5">
           {[["pending", "Registration Approvals", `${ov?.by_status?.pending || 0} pending`], ["access", "Enterprise & Client Access", "Create, reset, suspend"],
             ["plans", "Monetisation & Plans", "Pricing, billing, limits"], ["limits", "Limits & Subscription Status", "Usage and expiry"], ["audit", "Activity Log", "Platform actions"]].map(([v, l, sub]) => (
-            <TabsTrigger key={v} value={v} className="flex h-auto flex-col items-start rounded-xl border bg-card p-4 text-left data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid={`sa-tab-${v}`}>
+            <TabsTrigger key={v} value={v} className="flex h-auto flex-col items-start whitespace-normal rounded-xl border bg-card p-4 text-left data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid={`sa-tab-${v}`}>
               <span className="font-semibold">{l}</span><span className="text-xs opacity-70">{sub}</span></TabsTrigger>))}
         </TabsList>
         <TabsContent value="pending" className="mt-5"><EnterpriseList status="pending" plans={plans} onChanged={loadOv} /></TabsContent>

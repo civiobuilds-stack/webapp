@@ -120,3 +120,43 @@ See `/app/memory/test_credentials.md`.
 - Residential demo tenant civio-homes (seed.py seed_residential).
 
 ## Next: Phase 2 (Commercial hierarchy/roles incl. ASCO Manager & Pass Coordinator, company store workflow, DPR weekly targets) → Phase 3 (vehicles/drivers, safety, billing/QS docs, approval dashboard). User choices: camera-only for commercial required photos; push only for drivers (no SMS); passwords hash-only.
+
+## Implemented (2026-06, Stage 10 — Commercial Phase 2) ✅ iteration_10: 26/26 backend, frontend ~95% (fixes applied)
+- Roles (server.ROLE_NAMES/APPROVER): safety_engineer→safety_manager, quality_engineer→quality_manager, store_incharge→store_manager, billing_qs→billing_manager, pass_coordinator→project_manager, driver; managers→admin (admin-only creation). GET /api/roles. No ASCO manager (user choice).
+- Company-wide store (store.py): company_stock (migrated from store_stock), engineer request → PM approve → store issue (camera photo; shortage → 409 + status shortage + notify admin/store_manager) ; 3-step tool return (engineer → store verify → PM approve). /store Company Store page. 7-day unreturned tool reminders in daily cron.
+- Weekly engineer BOQ targets (phase2.py) from approved DPR quantities; green/red on RoleDashboard (/api/dashboard/role).
+- Site passes (labour/engineer): pass coordinator creates (camera photo) → PM approves/revokes; PassesTab.
+- Inspection stage client sign-off ("I approve" + remarks), withdrawn if an item later fails; shown in PDF.
+- Commercial required photos camera-only (CameraCapture camera-blocked state); residential keeps gallery fallback.
+- BOQ approval now sets boq_progress_percent only (not progress_percent).
+
+## Implemented (2026-06, Stage 11 — Super Admin upgrade) ✅ iteration_11: backend 100%, frontend 100%
+- 5 section buttons: Registration Approvals, Enterprise & Client Access (create enterprise + owner temp password once, reset owner access w/ forced change, suspend/reactivate, history dialog), Monetisation & Plans (billing_period), Limits & Subscription Status table, Activity Log.
+- Subscription: billing_status ∈ trial/manual/pending_payment/overdue/cancelled ('paid' rejected — no payment records), billing_period, subscription_expires_at (validated), subscription_state; expired → enforce_limit 403 subscription_expired. MRR excludes trial/cancelled/expired. status_history on enterprises.
+- Demo credentials removed from Login page. Leftover TEST_ enterprises deleted.
+- NOTE: civiobuilds@gmail.com is both super_admin and admin of enterprise 'civio' (not separated yet).
+
+## PENDING — user requested, NOT started (do next, in order)
+### Commercial A–J (user brief 2026-06)
+A. Full team view (View All/pagination), all company employees in create/assign, multi-project, per-module permission levels No Access/View/Create/Edit/Approve/Delete (extend commercial PERM_MODULES/ACTIONS), dashboards show only permitted modules, remove member keeps history, show login ID on account creation, job description optional (already optional).
+B. Mobile-friendly project nav per permissions: Overview, Activities, Progress, DPR, Team, Quality Inspections, IR Reports, Procurement, Inventory, Safety, Documents, Billing, Vehicles. REMOVE Commercial Cost Summary. Visual progress charts.
+C. Material request extended fields (spec, grade, unit, qty, date picker, delivery location, purpose, BOQ/activity ref, priority, remarks, attachments), editing + revisions + re-approval; flow Engineer→PM/Owner→Store issue/shortage→Procurement/Accounts record supplier/invoice/payment; no client approval; client sees description+status only; shows in PM Procurement tab.
+D. Inventory: create items with spec/location/condition/asset ID, additions/issues/returns/adjustments, company vs project stock (mostly exists in store.py; add adjustments + item metadata).
+E. Activities PM/Owner approval only; DPR/progress PM only; no client approval; BOQ-linked; revisions/approver details.
+F. Quality checklist items need acceptance criteria, corrective action, reinspection, closure; per-inspection IR PDF; IR approval matrix (client/consultant where configured); Failed Inspections card → detailed list page.
+G. Accounts Person role + Billing tab (Owner/PM/Accounts/Document Controller): expenses, supplier, invoice, amount, tax, due date, payment status, documents; invoice needs BOTH PM and Owner approval tracked separately; project expense summary + report.
+H. Company Vehicles: vehicles, drivers, availability, current project; vehicle request → PM approve; assign driver, trip status; push to driver (no SMS).
+I. Client Access Settings per project (team, approved DPR/progress, checklists, IR PDFs, photos, documents, procurement status) — visibility separate from approval.
+J. Photo upload persistence/preview/retry across modules.
+### Residential A–L (user brief 2026-06)
+A. Project setup fields (client details, scope, plot/building, floors, budget), multi-select team incl. Architect, Structural Engineer, MEP, Quality, Safety, Store, Accounts, Estimator roles (residential roles).
+B. Per-project per-module permissions (Quotations, Drawings, Design Approvals, BOQ, Progress, DPR, Inspection, IR, Materials, Inventory, Documents, Billing, Team, Vehicles).
+C. Quotations module + branded PDF, statuses Draft/Internal Review/Sent/Accepted/Rejected/Revised, client acceptance, revisions.
+D/E. Architect and Structural Engineer dashboards; drawing uploads by discipline/floor/type/number/revision.
+F. Drawing approval workflow (configurable reviewers, client/consultant optional, Approved for Use, superseded versions).
+G. Visual progress dashboard; activities PM/Owner approval; DPR PM only; no client approval.
+H. Quality checklist upgrades + per-inspection IR PDF + approval matrix + Failed Inspections detail list (shared with Commercial F).
+I. Material requests: REMOVE client approval (user confirmed) → Engineer→PM/Owner→Store→Procurement/Accounts; extended fields; client sees description/status only. (Currently residential.py material_approvals uses client approval — must change.)
+J. Inventory + Accounts role + Billing dashboard, dual PM+Owner invoice approval (shared with Commercial G).
+K. Client Access Settings (shared with Commercial I) incl. drawings, quotations.
+L. Photo persistence/preview + mobile nav.

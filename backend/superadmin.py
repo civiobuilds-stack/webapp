@@ -42,7 +42,7 @@ async def create_enterprise(body: EnterpriseCreateIn, sa: dict = Depends(sa_dep)
         "limits": {k: plan[k] for k in ("max_users", "max_projects", "max_storage_mb")}, "created_at": ts, "approved_at": ts,
         "created_by_platform": sa["id"], "status_history": [{"from": None, "to": "active", "reason": "Created by Super Admin", "by": sa["name"], "at": ts}]})
     await S.db.users.insert_one({"id": uid, "email": email, "password_hash": S.hash_password(pw), "name": body.owner_name, "role": "admin",
-                                 "phone": body.phone, "company_id": eid, "is_active": True, "is_demo": False, "email_verified": True, "created_at": ts})
+                                 "phone": body.phone, "company_id": eid, "is_active": True, "is_demo": False, "email_verified": True, "must_change_password": True, "created_at": ts})
     await S.platform_audit(sa, "enterprise created", eid, f"{body.company_name} owner {email}")
     return {"enterprise_id": eid, "login_id": email, "temporary_password": pw}
 

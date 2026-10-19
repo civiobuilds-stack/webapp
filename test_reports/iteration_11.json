@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 11 - Super Admin dashboard upgrade. Backend: 25/25 pytest pass (create enterprise, duplicate/invalid type/plan 400, reset-owner (old pw 401, new temp pw must_change_password=true, tenant APIs blocked until change), suspend needs reason, suspend/reactivate status_history with reasons + audit, civio cannot be suspended/reset, subscription paid->400, bad period->400, bad date->422, expiring_soon/active/expired states, expired -> 403 subscription_expired on POST /api/users and POST /api/projects, renew unblocks, plan billing_period update/persist/400/404, 10 superadmin endpoints 403 for owner@civiohomes.build, 401 unauth). Frontend (1920x1080): login page has no demo block; all 5 sa-tab-* buttons switch sections; create enterprise via UI (residential/starter) shows sa-create-credentials, active card; reset owner dialog shows sa-reset-credentials (verified old temp 401, new temp logs in with must_change_password=true); suspend with reason (confirm disabled when empty) -> suspended -> Reactivate -> active; sa-history-dialog shows 3 sa-history-row with reason; subscription dialog billing status options exclude 'paid', saved overdue/yearly/2025-12-01 -> sa-sub-state 'expired' badge; limits table row shows starter · overdue · yearly, 1/15, 0/10, 0/5120, 2025-12-01 (expired); plans tab sa-plan-free-period saved to quarterly (restored to monthly). All test enterprises cleaned up; reset_superadmin.py run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/superadmin/enterprises", "issue": "Owner created with a temporary password but must_change_password is not set (False), unlike reset-owner. Temp password shown to Super Admin stays valid permanently. Recommend setting must_change_password=True on create."},
+      {"endpoint": "PUT /api/superadmin/enterprises/{id}/subscription", "issue": "subscription_expires_at only regex-validated (^\\d{4}-\\d{2}-\\d{2}$); impossible dates like 2026-13-45 are accepted and compared as strings."},
+      {"endpoint": "GET /api/superadmin/overview", "issue": "MRR sums price_monthly of all active enterprises regardless of billing_status (trial/cancelled) or expired subscription; may overstate revenue."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "SubscriptionDialog", "issues": ["Expiry uses native <input type=date> instead of shadcn Calendar/Popover date picker", "Billing status/period use native <select> while Plan uses shadcn Select - inconsistent"]},
+      {"screen": "Create enterprise / Plans", "issues": ["sa-create-type, sa-create-plan and sa-plan-{id}-period are native selects (inconsistent with shadcn components)", "City and Phone inputs in create form lack data-testid"]},
+      {"screen": "Registration Approvals", "issues": ["5 leftover TEST_RES_*/TEST_XT_* pending enterprises from earlier iterations clutter the queue (data hygiene, not created in this iteration)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_superadmin_iter11.py", "/app/test_reports/pytest/pytest_iter11.xml"],
+  "action_items": [
+    "Optional: set must_change_password=True for owners created via POST /api/superadmin/enterprises",
+    "Optional: validate subscription_expires_at as a real date (date.fromisoformat)",
+    "Optional: replace native date input with shadcn Calendar; unify selects",
+    "Optional: delete leftover TEST_RES_*/TEST_XT_* pending enterprises"
+  ],
+  "critical_code_review_comments": [
+    "superadmin.py create_enterprise: no must_change_password on temp password (see minor issue)",
+    "Test file must run serially (-n 0) because pytest.ini enables xdist and tests share a module fixture with ordered state",
+    "server.py is 2066 lines - consider continuing split into modules (superadmin.py already extracted)"
+  ],
+  "updated_files": ["/app/backend/tests/test_superadmin_iter11.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Super Admin civiobuilds@gmail.com / Civio@123456; owner@civiohomes.build / CivioHome@2026",
+  "seed_data_creation": "TEST_ enterprises created by tests and UI were deleted afterwards. Plans starter/free billing_period restored to monthly. reset_superadmin.py executed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_superadmin_iter11.py -n 0 -v. No delete-enterprise API exists; cleanup via Mongo (users/projects/enterprises/platform_audit by company_id). System date in env is Oct 2026."
+}
