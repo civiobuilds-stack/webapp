@@ -60,6 +60,9 @@ export const ROLE_LABEL = {
   billing_manager: "Billing Manager",
   pass_coordinator: "Pass Coordinator",
   driver: "Driver",
+  accounts: "Accounts",
+  architect: "Architect",
+  structural_engineer: "Structural Engineer",
 };
 
 export const isManager = (role) => role === "admin" || role === "project_manager";

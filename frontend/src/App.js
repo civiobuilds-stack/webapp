@@ -19,6 +19,8 @@ import Landing from "@/pages/Landing";
 import AcceptInvite from "@/pages/AcceptInvite";
 import CompanySettings from "@/pages/CompanySettings";
 import SuperAdmin from "@/pages/SuperAdmin";
+import Accounts from "@/pages/Accounts";
+import Trips from "@/pages/Trips";
 import { SuperAdminRoute } from "@/components/ProtectedRoute";
 
 function Shell({ children }) {
@@ -72,6 +74,8 @@ function AppRouter() {
       <Route path="/projects/:id" element={<Shell><ProjectDetail /></Shell>} />
       <Route path="/people" element={<Shell><People /></Shell>} />
       <Route path="/store" element={<Shell><CompanyStore /></Shell>} />
+      <Route path="/accounts" element={<Shell><Accounts /></Shell>} />
+      <Route path="/trips" element={<Shell><Trips /></Shell>} />
       <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
       <Route path="/superadmin" element={<ProtectedRoute><SuperAdminRoute><AppShell><SuperAdmin /></AppShell></SuperAdminRoute></ProtectedRoute>} />
     </Routes>

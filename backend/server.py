@@ -41,19 +41,21 @@ ROLE_NAMES = {"admin": "Owner / Admin", "project_manager": "Project Manager", "s
               "safety_engineer": "Safety Engineer", "safety_manager": "Safety Manager", "quality_engineer": "Quality Engineer",
               "quality_manager": "Quality Manager", "store_incharge": "Store In-charge", "store_manager": "Store Manager",
               "billing_qs": "Billing / QS / Documents", "billing_manager": "Billing Manager", "pass_coordinator": "Pass Coordinator",
-              "driver": "Driver"}
+              "driver": "Driver", "accounts": "Accounts", "architect": "Architect", "structural_engineer": "Structural Engineer"}
 APPROVER = {"site_engineer": "project_manager", "safety_engineer": "safety_manager", "quality_engineer": "quality_manager",
             "store_incharge": "store_manager", "billing_qs": "billing_manager", "pass_coordinator": "project_manager",
             "driver": "project_manager", "project_manager": "admin", "safety_manager": "admin", "quality_manager": "admin",
-            "store_manager": "admin", "billing_manager": "admin"}
-COMMERCIAL_ONLY_ROLES = set(ROLE_NAMES) - {"admin", "project_manager", "site_engineer", "client"}
+            "store_manager": "admin", "billing_manager": "admin",
+            "accounts": "admin", "architect": "project_manager", "structural_engineer": "project_manager"}
+RESIDENTIAL_ONLY_ROLES = {"architect", "structural_engineer"}
+COMMERCIAL_ONLY_ROLES = set(ROLE_NAMES) - {"admin", "project_manager", "site_engineer", "client"} - RESIDENTIAL_ONLY_ROLES
 DEFAULT_ENTERPRISE_ID = "civio"
 BILLING_STATUSES = {"trial", "manual", "pending_payment", "overdue", "cancelled"}
 BILLING_PERIODS = {"monthly", "quarterly", "yearly"}
 ALL_MODULES = {"activities", "progress", "defects", "procurement", "reports", "photos", "team", "audit"}
 MODULES = {
-    "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store", "inspection"},
-    "residential": (ALL_MODULES - {"procurement", "defects"}) | {"inspection", "res_dpr", "material_approval"},
+    "commercial": (ALL_MODULES - {"defects"}) | {"dpr", "attendance", "members", "store", "inspection", "billing", "vehicles"},
+    "residential": (ALL_MODULES - {"procurement", "defects"}) | {"inspection", "res_dpr", "material_approval", "quotations", "drawings"},
 }
 DEFAULT_PLANS = [
     {"id": "free", "name": "Free Trial", "price_monthly": 0, "max_users": 5, "max_projects": 2, "max_storage_mb": 500,
@@ -219,7 +221,7 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
     role = user["role"]
     uid = user["id"]
     allowed = False
-    if role in {"admin", "store_incharge", "store_manager"}:
+    if role in {"admin", "store_incharge", "store_manager", "accounts"}:
         allowed = True
     elif role == "project_manager":
         allowed = project.get("project_manager_id") == uid or project.get("created_by") == uid
@@ -228,7 +230,8 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
     elif role == "client":
         allowed = project.get("client_id") == uid and not write
     if not allowed and role != "client":
-        allowed = bool(await db.project_members.find_one({"project_id": project_id, "user_id": uid}))
+        allowed = bool(await db.project_members.find_one({"project_id": project_id, "user_id": uid})) or any(
+            t.get("user_id") == uid and not t.get("removed_at") for t in project.get("team", []))
     if not allowed:
         raise HTTPException(status_code=403, detail="You cannot access this project.")
     return project
@@ -771,6 +774,8 @@ async def create_user(body: UserCreateIn, user: dict = Depends(require_roles("ad
         raise HTTPException(status_code=400, detail="Invalid role.")
     if body.role in COMMERCIAL_ONLY_ROLES and user["_enterprise"].get("business_type") != "commercial":
         raise HTTPException(status_code=400, detail="This role is available in the Commercial workspace only.")
+    if body.role in RESIDENTIAL_ONLY_ROLES and user["_enterprise"].get("business_type") != "residential":
+        raise HTTPException(status_code=400, detail="This role is available in the Residential workspace only.")
     if APPROVER.get(body.role) == "admin" and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Only an admin can add managers.")
     email = body.email.lower()
@@ -816,8 +821,9 @@ async def list_projects(user: dict = Depends(get_current_user)):
         q["engineer_ids"] = uid
     elif role == "client":
         q["client_id"] = uid
-    elif role not in {"admin", "store_incharge", "store_manager"}:
-        q["id"] = {"$in": [m["project_id"] async for m in db.project_members.find({"user_id": uid}, {"_id": 0, "project_id": 1})]}
+    elif role not in {"admin", "store_incharge", "store_manager", "accounts"}:
+        q["$or"] = [{"id": {"$in": [m["project_id"] async for m in db.project_members.find({"user_id": uid}, {"_id": 0, "project_id": 1})]}},
+                    {"team": {"$elemMatch": {"user_id": uid, "removed_at": None}}}]
     projects = await db.projects.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for p in projects:
         await enrich_project(p)
@@ -1258,6 +1264,8 @@ async def client_visible_file_ids(project_id: str) -> set:
     async for d in db.dprs.find({"project_id": project_id, "status": "approved"}, {"_id": 0, "photos": 1, "auto_photo_ids": 1}):
         ids.update(p["file_id"] for p in d.get("photos", []))
         ids.update(d.get("auto_photo_ids", []))
+    async for d in db.drawings.find({"project_id": project_id, "status": "approved"}, {"_id": 0, "file_id": 1}):
+        ids.add(d["file_id"])
     return ids
 
 
@@ -1997,6 +2005,10 @@ import superadmin  # noqa: E402
 api_router.include_router(superadmin.router)
 import phase2  # noqa: E402
 api_router.include_router(phase2.router)
+import billing  # noqa: E402
+api_router.include_router(billing.router)
+import quotations  # noqa: E402
+api_router.include_router(quotations.router)
 
 
 async def migrate_multitenant():

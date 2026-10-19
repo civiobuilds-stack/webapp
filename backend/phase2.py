@@ -19,7 +19,7 @@ def _monday(d: Optional[str] = None) -> str:
 @router.get("/roles")
 async def roles(user: dict = Depends(S.get_current_user)):
     bt = user["_enterprise"].get("business_type")
-    keys = [k for k in S.ROLE_NAMES if k != "admin" and (bt == "commercial" or k not in S.COMMERCIAL_ONLY_ROLES)]
+    keys = [k for k in S.ROLE_NAMES if k != "admin" and (bt == "commercial" or k not in S.COMMERCIAL_ONLY_ROLES) and (bt == "residential" or k not in S.RESIDENTIAL_ONLY_ROLES)]
     return [{"key": k, "label": S.ROLE_NAMES[k], "approver": S.APPROVER.get(k), "approver_label": S.ROLE_NAMES.get(S.APPROVER.get(k), ""),
              "admin_only": S.APPROVER.get(k) == "admin"} for k in keys]
 
@@ -195,6 +195,22 @@ async def role_dashboard(user: dict = Depends(C.commercial_user)):
     if role == "pass_coordinator":
         cards += [{"key": "pass_active", "label": "Active passes", "count": await S.db.site_passes.count_documents({"company_id": cid, "status": "active"})},
                   {"key": "pass_pending", "label": "Passes awaiting PM", "count": await S.db.site_passes.count_documents({"company_id": cid, "status": "pending", "created_by": uid})}]
+    if role in {"admin", "project_manager", "accounts"}:
+        bq = {"project_id": {"$in": pids}}
+        bills = S.db.bills.count_documents
+        if role == "project_manager":
+            cards.append({"key": "bills_pm", "label": "Bills to approve", "count": await bills({**bq, "status": "pending_pm", "project_id": {"$in": [p for p in pids]}})})
+        if role == "admin":
+            cards.append({"key": "bills_owner", "label": "Bills awaiting your final approval", "count": await bills({**bq, "status": "pending_owner"})})
+        if role in {"admin", "accounts"}:
+            cards += [{"key": "bills_unpaid", "label": "Approved bills to pay", "count": await bills({"company_id": cid, "status": "approved"})},
+                      {"key": "trips_open", "label": "Vehicle requests to assign", "count": await S.db.vehicle_requests.count_documents({"company_id": cid, "status": "requested"}), "alert": True}]
+        if role == "accounts":
+            cards.append({"key": "bills_rejected", "label": "Rejected bills to correct", "count": await bills({"company_id": cid, "status": "rejected", "created_by": uid})})
+    if role == "driver":
+        today = datetime.now(C.IST).date().isoformat()
+        cards += [{"key": "trips_today", "label": "Trips today", "count": await S.db.vehicle_requests.count_documents({"driver.id": uid, "trip_date": today, "status": {"$in": ["assigned", "in_progress"]}})},
+                  {"key": "trips_upcoming", "label": "Upcoming trips", "count": await S.db.vehicle_requests.count_documents({"driver.id": uid, "trip_date": {"$gt": today}, "status": "assigned"})}]
     q = {"project_id": {"$in": pids}, "week_start": _monday()}
     if role == "site_engineer":
         q["engineer_id"] = uid

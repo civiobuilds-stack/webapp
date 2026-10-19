@@ -52,5 +52,5 @@ def get_object(path: str):
 MIME_TYPES = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
     "gif": "image/gif", "webp": "image/webp", "pdf": "application/pdf",
-    "heic": "image/heic", "heif": "image/heif",
+    "heic": "image/heic", "heif": "image/heif", "dwg": "application/acad", "dxf": "application/dxf",
 }

@@ -21,9 +21,9 @@ router = APIRouter()
 log = logging.getLogger("civio.commercial")
 IST = ZoneInfo("Asia/Kolkata")
 
-PERM_MODULES = ["dpr", "attendance", "store", "progress", "procurement", "reports"]
+PERM_MODULES = ["dpr", "attendance", "store", "progress", "procurement", "reports", "billing", "vehicles"]
 ACTIONS = ["view", "create", "edit", "submit", "approve", "export", "delete"]
-ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"], "store": ["view", "create"]}
+ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"], "store": ["view", "create"], "vehicles": ["view", "create"]}
 MEMBER_DEFAULT = {"dpr": ["view"], "attendance": ["create"]}
 DEFAULT_DEPARTMENTS = ["Civil", "MEP", "QA/QC", "Safety", "Planning", "Procurement"]
 DEFAULT_DESIGNATIONS = ["Project Manager", "Site Engineer", "Supervisor", "Foreman", "QA/QC Engineer", "Safety Officer", "Storekeeper"]
@@ -69,6 +69,8 @@ async def perms_for(user, project) -> Dict[str, List[str]]:
         return {"dpr": ["view"]}
     if user["role"] in {"store_incharge", "store_manager"}:
         return {"store": ["view", "export"]}
+    if user["role"] == "accounts":
+        return {"billing": ["view", "create", "edit", "submit", "export"], "vehicles": list(ACTIONS)}
     return {}
 
 

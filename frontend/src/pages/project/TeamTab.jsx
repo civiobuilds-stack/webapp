@@ -16,15 +16,19 @@ import { UserPlus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const initials = (n) => (n || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
-const TAG = { project_manager: "Project Manager", client: "Client", site_engineer: "Site Engineer", admin: "Owner / Admin" };
+const TAG = ROLE_LABEL;
+const PAGE = 12;
 
 export function TeamTab({ project, role, reload }) {
   const manager = isManager(role);
   const [confirm, setConfirm] = useState(null);
+  const [q, setQ] = useState("");
+  const [limit, setLimit] = useState(PAGE);
   const jobs = Object.fromEntries((project.team || []).map((t) => [t.user_id, t]));
   const seen = new Set();
   const people = [project.project_manager, project.client, ...(project.engineers || []), ...(project.team || []).map((t) => t.user)]
     .filter((p) => p && !seen.has(p.id) && seen.add(p.id));
+  const matched = people.filter((p) => !q || `${p.name} ${p.email} ${TAG[p.role] || ""} ${jobs[p.id]?.job_title || ""}`.toLowerCase().includes(q.toLowerCase()));
   const remove = async () => {
     const p = confirm; setConfirm(null);
     try { await api.delete(`/projects/${project.id}/team/${p.id}`); toast.success(`${p.name} removed from project`); reload(); }
@@ -36,8 +40,10 @@ export function TeamTab({ project, role, reload }) {
         <div><h3 className="font-heading text-lg font-semibold">Project team</h3><p className="text-sm text-muted-foreground">People with access to this project.</p></div>
         {manager && <AddPeopleDialog project={project} reload={reload} />}
       </div>
+      <div className="flex flex-wrap items-center gap-2"><Input className="max-w-xs" placeholder="Search team by name, role or job" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} data-testid="team-search-input" />
+        <span className="text-xs text-muted-foreground" data-testid="team-count">{matched.length} of {people.length} people</span></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {people.map((p) => (
+        {matched.slice(0, limit).map((p) => (
           <Card key={p.id} className="flex items-start gap-3 p-4" data-testid="team-member">
             <Avatar className="h-11 w-11"><AvatarFallback className="bg-primary/10 text-primary">{initials(p.name)}</AvatarFallback></Avatar>
             <div className="min-w-0 flex-1"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted-foreground">{p.email}</div>
@@ -48,6 +54,7 @@ export function TeamTab({ project, role, reload }) {
           </Card>
         ))}
       </div>
+      {matched.length > limit && <Button variant="outline" className="w-full" onClick={() => setLimit(limit + PAGE)} data-testid="team-show-more">Show more ({matched.length - limit} remaining)</Button>}
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}><AlertDialogContent>
         <AlertDialogHeader><AlertDialogTitle>Remove {confirm?.name} from this project?</AlertDialogTitle>
           <AlertDialogDescription>They lose access to this project. Their past updates, photos and audit history are kept.</AlertDialogDescription></AlertDialogHeader>
@@ -78,7 +85,7 @@ function AddPeopleDialog({ project, reload }) {
         <div className="space-y-4">
           <div className="space-y-1.5"><Label>Person</Label>
             <Select value={f.user_id} onValueChange={pick}><SelectTrigger data-testid="add-people-select"><SelectValue placeholder="Choose from your company" /></SelectTrigger>
-              <SelectContent>{["project_manager", "site_engineer", "client"].map((r) => people.filter((u) => u.role === r).map((u) => (
+              <SelectContent>{["project_manager", "site_engineer", "architect", "structural_engineer", "client"].map((r) => people.filter((u) => u.role === r).map((u) => (
                 <SelectItem key={u.id} value={u.id}>{u.name} · {ROLE_LABEL[u.role]}{u.job_title ? ` · ${u.job_title}` : ""}</SelectItem>)))}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>Job role on this project</Label><Input value={f.job_title} onChange={(e) => setF({ ...f, job_title: e.target.value })} placeholder="e.g. Structural engineer" data-testid="add-people-job-title" /></div>
           <div className="space-y-1.5"><Label>Job description</Label><Textarea rows={3} value={f.job_description} onChange={(e) => setF({ ...f, job_description: e.target.value })} data-testid="add-people-job-desc" /></div>

@@ -374,3 +374,42 @@ def build_report(report_type, ctx):
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     buf.seek(0)
     return buf.read()
+
+
+def build_quotation(project, q, r, client, resp, meta, brand):
+    buf = io.BytesIO()
+    st = _styles()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=32 * mm, bottomMargin=20 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    s = [Paragraph(f"Quotation — {q['title']}", st["CivH1"]),
+         Paragraph(f"{q['number']}  ·  Revision R{r['rev']}", st["CivH2"]),
+         _kv_table([("Project", f"{project['name']} ({project.get('code', '')})"), ("Site address", project.get("address") or "—"),
+                    ("Prepared for", " · ".join(filter(None, [client.get("name"), client.get("email"), client.get("phone")])) or "—"),
+                    ("Prepared by", f"{r.get('created_by_name', '')} — {brand.get('name', '')}"),
+                    ("Issued on", _fmt_date(r.get("sent_at") or r.get("created_at"))), ("Valid until", _fmt_date(r.get("valid_until")))], st),
+         Paragraph("Scope & Pricing", st["CivH2"]),
+         _data_table(["#", "Description", "Unit", "Qty", "Rate (Rs)", "Amount (Rs)"],
+                     [[i + 1, it["description"], it["unit"], f"{it['qty']:g}", f"{it['rate']:,.2f}", f"{it['amount']:,.2f}"] for i, it in enumerate(r["items"])],
+                     st, [10 * mm, 72 * mm, 16 * mm, 18 * mm, 27 * mm, 37 * mm]),
+         Spacer(1, 6)]
+    totals = [("Subtotal", r["subtotal"])] + ([("Discount", -r["discount"])] if r.get("discount") else []) + [(f"GST @ {r['tax_pct']:g}%", r["tax"]), ("Grand Total", r["total"])]
+    t = Table([[Paragraph(f"<b>{k}</b>", st["CivCell"]), Paragraph(f"<b>Rs {v:,.2f}</b>" if k == "Grand Total" else f"Rs {v:,.2f}", st["CivCell"])] for k, v in totals],
+              colWidths=[40 * mm, 40 * mm], hAlign="RIGHT")
+    t.setStyle(TableStyle([("LINEABOVE", (0, -1), (-1, -1), 0.8, FOREST), ("BACKGROUND", (0, -1), (-1, -1), BONE), ("ALIGN", (1, 0), (1, -1), "RIGHT")]))
+    s.append(t)
+    for title, key in [("Notes", "notes"), ("Terms & Conditions", "terms")]:
+        if r.get(key):
+            s.append(Paragraph(title, st["CivH2"]))
+            s.append(Paragraph(r[key].replace("\n", "<br/>"), st["CivBody"]))
+    s.append(Paragraph("Client Acceptance", st["CivH2"]))
+    if resp and resp["action"] == "accept":
+        s.append(_kv_table([("Status", "ACCEPTED — electronically signed"), ("E-signature", f"<font name='Times-Italic' size='14'>{resp['signature_name']}</font>"),
+                            ("Signed by account", resp["by"]), ("Signed at", resp["at"][:19].replace("T", " ") + " UTC"), ("IP address", resp.get("ip") or "—")], st))
+    elif resp:
+        s.append(Paragraph(f"Client response: <b>{resp['action'].replace('_', ' ').title()}</b> — {resp.get('comment') or ''}", st["CivBody"]))
+    else:
+        s.append(Paragraph("Awaiting client acceptance. The client accepts in the CIVIO app by typing their full name as an e-signature.", st["CivMuted"]))
+
+    def on_page(canvas, dd):
+        _header_footer(canvas, dd, meta, brand)
+    doc.build(s, onFirstPage=on_page, onLaterPages=on_page)
+    return buf.getvalue()

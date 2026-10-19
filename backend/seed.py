@@ -216,13 +216,21 @@ async def seed_residential(db, hash_password, now_iso):
 
 async def seed_roles(db, hash_password, now_iso):
     """Commercial demo accounts for the extended role structure (idempotent)."""
-    for uid, email, name, role in [("user-store", "store@civio.build", "Suresh Kumar (Store In-charge)", "store_incharge"),
-                                   ("user-storemgr", "storemanager@civio.build", "Lata Menon (Store Manager)", "store_manager"),
-                                   ("user-pass", "pass@civio.build", "Imran Shaikh (Pass Coordinator)", "pass_coordinator")]:
+    for uid, email, name, role, cid in [("user-store", "store@civio.build", "Suresh Kumar (Store In-charge)", "store_incharge", "civio"),
+                                   ("user-storemgr", "storemanager@civio.build", "Lata Menon (Store Manager)", "store_manager", "civio"),
+                                   ("user-pass", "pass@civio.build", "Imran Shaikh (Pass Coordinator)", "pass_coordinator", "civio"),
+                                   ("user-accounts", "accounts@civio.build", "Neha Gupta (Accounts)", "accounts", "civio"),
+                                   ("user-driver", "driver@civio.build", "Ramesh Yadav (Driver)", "driver", "civio"),
+                                   ("res-architect", "architect@civiohomes.build", "Priya Desai (Architect)", "architect", "civio-homes"),
+                                   ("res-structural", "structural@civiohomes.build", "Anil Kulkarni (Structural Engineer)", "structural_engineer", "civio-homes")]:
         if not await db.users.find_one({"email": email}):
             await db.users.insert_one({"id": uid, "email": email, "password_hash": hash_password("CivioRole@2026"), "name": name, "role": role,
-                                       "phone": "+91 98200 55555", "company_id": "civio", "is_active": True, "is_demo": True,
+                                       "phone": "+91 98200 55555", "company_id": cid, "is_active": True, "is_demo": True,
                                        "email_verified": True, "created_at": now_iso()})
     if not await db.project_members.find_one({"project_id": "proj-demo-1", "user_id": "user-pass"}):
         await db.project_members.insert_one({"project_id": "proj-demo-1", "user_id": "user-pass", "company_id": "civio", "responsibility": "Gate passes",
                                              "permissions": {}, "created_at": now_iso()})
+    for uid in ("res-architect", "res-structural"):
+        if await db.users.find_one({"id": uid}) and not await db.projects.find_one({"id": "proj-res-1", "team.user_id": uid}):
+            await db.projects.update_one({"id": "proj-res-1"}, {"$push": {"team": {"user_id": uid, "job_title": "Design consultant", "job_description": "",
+                                                                                   "added_by": "res-owner", "added_at": now_iso(), "removed_at": None}}})

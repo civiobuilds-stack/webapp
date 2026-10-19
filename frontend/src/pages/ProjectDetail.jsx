@@ -23,6 +23,11 @@ import { TeamTab } from "@/pages/project/TeamTab";
 import { AuditTab } from "@/pages/project/AuditTab";
 import { ProcurementTab } from "@/pages/project/ProcurementTab";
 import { ReportsTab } from "@/pages/project/ReportsTab";
+import { BillingTab } from "@/pages/project/BillingTab";
+import { VehiclesTab } from "@/pages/project/VehiclesTab";
+import { QuotationsTab } from "@/pages/project/QuotationsTab";
+import { DrawingsTab } from "@/pages/project/DrawingsTab";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -33,6 +38,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [perm, setPerm] = useState(null);
+  const [tab, setTab] = useState(searchParams.get("tab") || "overview");
   useEffect(() => {
     const mods = user.enterprise?.modules || [];
     if ((mods.includes("dpr") && user.role !== "client") || mods.includes("res_dpr"))
@@ -56,6 +62,19 @@ export default function ProjectDetail() {
   const hasInspection = mods.includes("inspection");
   const resDpr = mods.includes("res_dpr") && perm;
   const hasMaterials = mods.includes("material_approval");
+  const hasQuotes = mods.includes("quotations");
+  const hasDrawings = mods.includes("drawings");
+  const manages = user.role === "admin" || (user.role === "project_manager" && (project.project_manager_id === user.id || project.created_by === user.id));
+  const can = (m) => perm && (perm.permissions?.[m] || []).includes("view") && mods.includes(m);
+  const tabs = [
+    { v: "overview", l: "Overview" }, { v: "activities", l: "Activities" }, { v: "progress", l: "Progress" },
+    hasInspection && { v: "inspection", l: "Inspection Checklist" }, resDpr && { v: "dpr", l: "DPR" },
+    hasMaterials && { v: "materials", l: "Materials" }, hasQuotes && { v: "quotations", l: "Quotations" }, hasDrawings && { v: "drawings", l: "Drawings" },
+    hasProcurement && { v: "procurement", l: "Procurement" }, { v: "reports", l: "Reports" }, { v: "photos", l: "Photos" }, { v: "team", l: "Team" },
+    manager && { v: "audit", l: "Audit Log" },
+    ...(commercial && perm ? [{ v: "dpr", l: "DPR" }, { v: "attendance", l: "Attendance" }, { v: "store", l: "Store" }, { v: "members", l: "Members" },
+      { v: "passes", l: "Site Passes" }, can("billing") && { v: "billing", l: "Billing" }, can("vehicles") && { v: "vehicles", l: "Vehicles" }] : []),
+  ].filter(Boolean);
 
   if (user.role === "pass_coordinator") return (
     <div className="space-y-6"><h1 className="font-heading text-2xl font-bold">{project.name} <span className="font-mono text-sm text-muted-foreground">{project.code}</span></h1>
@@ -87,24 +106,13 @@ export default function ProjectDetail() {
         </div>
       </Card>
 
-      <Tabs defaultValue={searchParams.get("tab") || "overview"}>
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
-          <TabsTrigger value="progress" data-testid="tab-progress">Progress</TabsTrigger>
-          {hasInspection && <TabsTrigger value="inspection" data-testid="tab-inspection">Inspection Checklist</TabsTrigger>}
-          {resDpr && <TabsTrigger value="dpr" data-testid="tab-dpr">DPR</TabsTrigger>}
-          {hasMaterials && <TabsTrigger value="materials" data-testid="tab-materials">Materials</TabsTrigger>}
-          {hasProcurement && <TabsTrigger value="procurement" data-testid="tab-procurement">Procurement</TabsTrigger>}
-          <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
-          <TabsTrigger value="photos" data-testid="tab-photos">Photos</TabsTrigger>
-          <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
-          {manager && <TabsTrigger value="audit" data-testid="tab-audit">Audit Log</TabsTrigger>}
-          {commercial && perm && <TabsTrigger value="dpr" data-testid="tab-dpr">DPR</TabsTrigger>}
-          {commercial && perm && <TabsTrigger value="attendance" data-testid="tab-attendance">Attendance</TabsTrigger>}
-          {commercial && perm && <TabsTrigger value="store" data-testid="tab-store">Store</TabsTrigger>}
-          {commercial && perm && <TabsTrigger value="members" data-testid="tab-members">Members</TabsTrigger>}
-          {commercial && perm && <TabsTrigger value="passes" data-testid="tab-passes">Site Passes</TabsTrigger>}
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="md:hidden" data-testid="project-mobile-menu">
+          <Select value={tab} onValueChange={setTab}><SelectTrigger className="h-12 text-base font-semibold" data-testid="project-mobile-menu-select"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-[70vh]">{tabs.map((t) => <SelectItem key={t.v} value={t.v} data-testid={`mobile-tab-${t.v}`}>{t.l}</SelectItem>)}</SelectContent></Select>
+        </div>
+        <TabsList className="hidden h-auto w-full flex-wrap justify-start gap-1 md:flex">
+          {tabs.map((t) => <TabsTrigger key={t.v} value={t.v} data-testid={`tab-${t.v}`}>{t.l}</TabsTrigger>)}
         </TabsList>
 
         <TabsContent value="overview" className="mt-5">
@@ -115,6 +123,8 @@ export default function ProjectDetail() {
         {hasInspection && <TabsContent value="inspection" className="mt-5"><InspectionTab project={project} role={user.role} /></TabsContent>}
         {resDpr && <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} initialDpr={searchParams.get("dpr")} /></TabsContent>}
         {hasMaterials && <TabsContent value="materials" className="mt-5"><MaterialApprovalsTab project={project} role={user.role} userId={user.id} /></TabsContent>}
+        {hasQuotes && <TabsContent value="quotations" className="mt-5"><QuotationsTab project={project} user={user} manages={manages} /></TabsContent>}
+        {hasDrawings && <TabsContent value="drawings" className="mt-5"><DrawingsTab project={project} user={user} manages={manages} /></TabsContent>}
         {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
@@ -126,6 +136,8 @@ export default function ProjectDetail() {
           <TabsContent value="members" className="mt-5"><MembersTab project={project} meta={perm} /></TabsContent>
           <TabsContent value="passes" className="mt-5"><PassesTab project={project} role={user.role} manages={perm.manages} /></TabsContent>
           <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} meta={perm} /></TabsContent>
+          {can("billing") && <TabsContent value="billing" className="mt-5"><BillingTab project={project} user={user} perms={perm.permissions} /></TabsContent>}
+          {can("vehicles") && <TabsContent value="vehicles" className="mt-5"><VehiclesTab project={project} user={user} perms={perm.permissions} /></TabsContent>}
         </>}
       </Tabs>
     </div>

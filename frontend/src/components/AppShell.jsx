@@ -9,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse, Receipt, Car } from "lucide-react";
 import { API, getToken } from "@/lib/api";
 import { refreshPush } from "@/lib/push";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,8 @@ const NAV = [
   { to: "/projects", label: "Projects", icon: FolderKanban, testid: "nav-projects" },
   { to: "/people", label: "People", icon: Users, testid: "nav-people", managerOnly: true },
   { to: "/store", label: "Company Store", icon: Warehouse, testid: "nav-store", commercialStaff: true },
+  { to: "/accounts", label: "Billing & Fleet", icon: Receipt, testid: "nav-accounts", roles: ["accounts", "admin"], module: "billing" },
+  { to: "/trips", label: "My Trips", icon: Car, testid: "nav-trips", roles: ["driver"], module: "vehicles" },
   { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
   { to: "/settings", label: "Company Settings", icon: Settings, testid: "nav-settings", adminOnly: true },
 ];
@@ -53,6 +55,7 @@ export function AppShell({ children }) {
         </div>
       )}
       {nav.filter((n) => (!n.managerOnly || manager) && (!n.adminOnly || user?.role === "admin")
+        && (!n.roles || (n.roles.includes(user?.role) && (user?.enterprise?.modules || []).includes(n.module)))
         && (!n.commercialStaff || (user?.enterprise?.business_type === "commercial" && !["client", "driver"].includes(user?.role)))).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (
