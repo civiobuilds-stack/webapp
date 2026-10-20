@@ -1330,6 +1330,7 @@ async def download_file(file_id: str, request: Request, auth: str = Query(None))
     if not record:
         raise HTTPException(status_code=404, detail="File not found")
     if record.get("project_id"):
+        REQ_CTX.set(("GET", "/api/photos" if (record.get("content_type") or "").startswith("image/") else "/api/documents"))
         await get_project_or_403(record["project_id"], user)
         if user["role"] == "client":
             visible = await client_visible_file_ids(record["project_id"])
@@ -2088,6 +2089,7 @@ async def migrate_multitenant():
     await db.subscription_email_log.create_index("key", unique=True)
     async for t in db.vehicle_requests.find({"from_date": {"$exists": False}, "trip_date": {"$exists": True}}, {"_id": 0, "id": 1, "trip_date": 1, "drop": 1}):
         await db.vehicle_requests.update_one({"id": t["id"]}, {"$set": {"from_date": t["trip_date"], "to_date": t["trip_date"], "destination": t.get("drop") or ""}})
+    await db.vehicle_requests.update_many({"status": "completed"}, {"$set": {"status": "returned"}})
     await db.projects.create_index([("company_id", 1), ("code", 1)])
     await db.files.create_index([("company_id", 1), ("is_deleted", 1)])
     await db.dprs.create_index([("project_id", 1), ("report_date", 1)], unique=True)

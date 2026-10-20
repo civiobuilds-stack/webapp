@@ -1,6 +1,6 @@
 import "@/App.css";
 import { useEffect, useRef } from "react";
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
@@ -82,6 +82,7 @@ function AppRouter() {
       <Route path="/my-attendance" element={<Shell><MyAttendance /></Shell>} />
       <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
       <Route path="/superadmin" element={<ProtectedRoute><SuperAdminRoute><AppShell><SuperAdmin /></AppShell></SuperAdminRoute></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 13 tested 5 features: subscription lifecycle, project team, fleet, per-project access control and selfie attendance. Backend: the new pytest suite passes 12/12 (tests/test_iter13_subscription_fleet_access.py). The regression run of iter12+iter10 passes 41/43. The 2 failures are old vehicle tests that the new fleet spec made obsolete, so they are now marked skip. Frontend: the trial-ended screen, trial banner, Super Admin billing settings + Trial & renewal dialog, Add people dialog, PermDialog (16 modules), Activities tab hidden for an engineer set to None, nav-my-attendance + checkin-prompt, the PM team attendance view (selfie preview + map link), the full Vehicles tab flow (engineer request -> PM approve -> Add to fleet -> assign -> driver start/return on /trips), the /fleet page for admin and PM, the dashboard fleet-status-card, the Accounts 'Billing' nav and the mobile project dropdown all work. Found 1 functional gap (residential geofence) and a few minor issues. The preview env had a few transient 'src/index.js failed to load' and Cloudflare challenge pages; these were not app bugs.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/projects/{pid}/geofence (residential)", "issue": "The geofence endpoint uses C.commercial_user, so a residential PM gets 403 and has no UI to set a site geofence. If a residential member has 'Site location required' turned on, they can never check in at that project (400 'PM has not set the site geofence yet'). They can only pick Office / off-site. Fix: allow residential PMs to set the geofence (and add UI for it), or hide the location toggle in residential.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "vehicle_requests migration", "issue": "3 legacy requests still have status 'completed'. They were not migrated to 'returned' and still show a 'completed' badge on the Vehicles tab, /fleet and /trips (e.g. 15 Mar 2027 Bandra site, 12 Feb 2027, 04 Jan 2027)."},
+      {"endpoint": "get_project_or_403 route_module", "issue": "The URL->module mapping uses substring matching. 'files/' maps to photos, so a member whose Photos access is None also gets 403 when downloading document/drawing files through /api/files/{id}/download. Consider mapping file downloads by the file's own module."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TeamTab (commercial)", "issue": "Team tab builds its list from the team array, engineer_ids, PM and client, and ignores project_members. pass@civio.build is a member of proj-demo-1 (in project_members) but does not appear in the Team list (4 of 4 people), and the Add people dialog offers him as addable.", "selector": "[data-testid='team-member'], [data-testid='add-people-option']", "priority": "MEDIUM"},
+      {"component": "Routing", "issue": "Unknown routes such as /dashboard render a blank page. There is no catch-all/404 route in App.js.", "selector": "n/a", "priority": "LOW"},
+      {"component": "Super Admin billing settings card", "issue": "GET /superadmin/settings/billing fires twice. If the admin types before the response arrives, the form state is overwritten and Save sends empty values. In the first test run, Save persisted {payment_instructions:'', default_trial_days:null}. Seed the form only once.", "selector": "[data-testid='sa-billing-settings']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LifecycleDialog / Fleet vehicle dialog / Vehicles request / Team attendance date", "issues": ["These use the browser's native <input type='date'> instead of the shadcn Calendar/Popover date picker"]},
+      {"screen": "PermDialog", "issue_note": "", "issues": ["The Attendance module shows level 'Custom' by default because the preset is ['create'] without 'view'. This is confusing for PMs."]},
+      {"screen": "TrialEnded plans grid", "issues": ["Price suffix is inconsistent between plans: '/monthly' vs '/month' (billing_period value is printed raw)"]},
+      {"screen": "Commercial project tabs", "issues": ["Both a 'Team' tab and a 'Members' tab are shown, which overlap in purpose"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter13_subscription_fleet_access.py", "/app/test_reports/pytest/pytest_iter13.xml"],
+  "action_items": [
+    "Enable geofence setting (API + UI) for residential PMs, or hide 'Site location required' in residential workspaces",
+    "Migrate legacy vehicle_requests status 'completed' -> 'returned'",
+    "TeamTab: include project_members-only users (e.g. pass coordinator) in the team list and exclude them from the Add people candidates",
+    "Add a catch-all route (redirect to / or a 404 page)",
+    "Billing settings card: don't overwrite the form after the user starts typing (double GET)",
+    "Optional: map /files/{id}/download to the file's module instead of photos; replace native date inputs with the shadcn Calendar"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2138 lines and commercial.py is 866 lines, both over the 700-line guideline",
+    "route_module relies on substring order in ROUTE_MODULES and is fragile for future routes (e.g. a 'restore' path would match 'store'). Prefer explicit per-route module declarations.",
+    "Subscription reminder emails go only to role=admin users of the enterprise (owner included because the owner is admin). OK, but there is no retry if Resend fails, because the dedupe row is inserted before sending."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter13_subscription_fleet_access.py", "/app/backend/tests/test_billing_vehicles_quotes_iter12.py (TestVehicles marked skip as obsolete)"],
+  "success_rate": {"backend": "100% (12/12 new; 41/43 regression, 2 obsolete now skipped)", "frontend": "~92% (all flows work; residential geofence gap + Team list inconsistency)"},
+  "seed_data_creation": "None persisted. Test vehicles, vehicle requests, staff_attendance rows, the eng2 project_member row, platform_settings billing and TEST_ Trial Co enterprises were cleaned up. civio-homes subscription fields were unset. One subscription_email_log row for civio-homes (today) was left from the cron dedupe test. reset_superadmin.py was run.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -n 0. With xdist, the subscription-expiry tests on civio-homes race with the other tests. The server clock reads 2026-10-20. proj-demo-1 originally has no geofence and no project_members row for user-eng2; restore both after tests. The architect on proj-res-1 had attendance_required=true set by the main agent (kept). Residential geofence is not settable.",
+  "rca of the issue": "Residential geofence: store.py set_geofence depends on C.commercial_user (require_module 'dpr'), which residential workspaces lack. staff_attendance.check_in nevertheless enforces the geofence for residential members with location_required. Team list gap: TeamTab.jsx computes people/onProject from project.team, engineer_ids, PM and client only. Users added through Members (project_members) are omitted."
+}

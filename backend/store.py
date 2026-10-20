@@ -418,7 +418,7 @@ async def _fence(pid, user, body: LabourIn):
 
 
 @router.put("/projects/{pid}/geofence")
-async def set_geofence(pid: str, body: GeofenceIn, user: dict = Depends(C.commercial_user)):
+async def set_geofence(pid: str, body: GeofenceIn, user: dict = Depends(C.dpr_user)):
     project = await S.get_project_or_403(pid, user)
     if not C._manages(user, project):
         raise HTTPException(status_code=403, detail="Only the project manager or admin can set the geofence.")

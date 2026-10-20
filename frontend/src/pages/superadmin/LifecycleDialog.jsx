@@ -39,7 +39,7 @@ export function LifecycleDialog({ ent, onClose, onDone }) {
 
 export function BillingSettingsCard() {
   const [f, setF] = useState(null);
-  useEffect(() => { api.get("/superadmin/settings/billing").then((r) => setF({ payment_instructions: r.data.payment_instructions || "", default_trial_days: r.data.default_trial_days ?? "" })).catch(() => {}); }, []);
+  useEffect(() => { api.get("/superadmin/settings/billing").then((r) => setF((prev) => prev || { payment_instructions: r.data.payment_instructions || "", default_trial_days: r.data.default_trial_days ?? "" })).catch(() => {}); }, []);
   const save = async () => {
     try { await api.put("/superadmin/settings/billing", { payment_instructions: f.payment_instructions, default_trial_days: f.default_trial_days ? Number(f.default_trial_days) : null }); toast.success("Billing settings saved"); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }

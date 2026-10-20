@@ -79,7 +79,7 @@ export default function ProjectDetail() {
     hasMaterials && { v: "materials", l: "Materials" }, hasQuotes && { v: "quotations", l: "Quotations" }, hasDrawings && { v: "drawings", l: "Drawings" },
     hasProcurement && { v: "procurement", l: "Procurement" }, { v: "reports", l: "Reports" }, { v: "photos", l: "Photos" }, { v: "team", l: "Team" },
     manager && { v: "audit", l: "Audit Log" },
-    ...(commercial && perm ? [{ v: "dpr", l: "DPR" }, { v: "attendance", l: "Attendance" }, { v: "store", l: "Store" }, { v: "members", l: "Members" },
+    ...(commercial && perm ? [{ v: "dpr", l: "DPR" }, { v: "attendance", l: "Attendance" }, { v: "store", l: "Store" },
       { v: "passes", l: "Site Passes" }, can("billing") && { v: "billing", l: "Billing" }, can("vehicles") && { v: "vehicles", l: "Vehicles" }] : []),
   ].filter(Boolean).filter(allow);
 

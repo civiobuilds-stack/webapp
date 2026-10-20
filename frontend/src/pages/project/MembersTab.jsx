@@ -17,6 +17,7 @@ const LEVELS = {
   create: { label: "Create", acts: ["view", "create", "submit"] },
   edit: { label: "Edit", acts: ["view", "create", "submit", "edit"] },
   approve: { label: "Approve", acts: ["view", "create", "submit", "edit", "approve", "export"] },
+  own: { label: "Own only", acts: ["create"], only: "attendance" },
 };
 const PAGE = 10;
 
@@ -62,7 +63,7 @@ export function PermDialog({ project, meta, member, employees = [], onClose, onD
                     <span className="font-medium">{meta.module_labels?.[m] || m}</span>
                     <Select value={lvl} onValueChange={(l) => l !== "custom" && setLevel(m, l)}>
                       <SelectTrigger className="w-44" data-testid={`perm-level-${m}`}><SelectValue /></SelectTrigger>
-                      <SelectContent>{Object.entries(LEVELS).map(([k, v]) => <SelectItem key={k} value={k} data-testid={`perm-level-${m}-${k}`}>{v.label}</SelectItem>)}
+                      <SelectContent>{Object.entries(LEVELS).filter(([, v]) => !v.only || v.only === m).map(([k, v]) => <SelectItem key={k} value={k} data-testid={`perm-level-${m}-${k}`}>{v.label}</SelectItem>)}
                         {lvl === "custom" && <SelectItem value="custom">Custom</SelectItem>}</SelectContent></Select>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">{meta.actions.map((a) => (

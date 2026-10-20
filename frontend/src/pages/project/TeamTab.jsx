@@ -25,11 +25,11 @@ export function TeamTab({ project, role, reload, meta }) {
   const [q, setQ] = useState("");
   const [access, setAccess] = useState(null);
   const [members, setMembers] = useState({});
-  const loadMembers = () => manager && meta && api.get(`/projects/${project.id}/members`).then((r) => setMembers(Object.fromEntries(r.data.map((m) => [m.user_id, m])))).catch(() => {});
+  const loadMembers = () => meta && api.get(`/projects/${project.id}/members`).then((r) => setMembers(Object.fromEntries(r.data.map((m) => [m.user_id, m])))).catch(() => {});
   useEffect(() => { loadMembers(); /* eslint-disable-next-line */ }, [project.id, meta?.manages]);
   const jobs = Object.fromEntries((project.team || []).map((t) => [t.user_id, t]));
   const seen = new Set();
-  const people = [project.project_manager, project.client, ...(project.engineers || []), ...(project.team || []).map((t) => t.user)]
+  const people = [project.project_manager, project.client, ...(project.engineers || []), ...(project.team || []).map((t) => t.user), ...Object.values(members).map((m) => m.user)]
     .filter((p) => p && !seen.has(p.id) && seen.add(p.id));
   const matched = people.filter((p) => !q || `${p.name} ${p.email} ${TAG[p.role] || ""} ${jobs[p.id]?.job_title || ""}`.toLowerCase().includes(q.toLowerCase()));
   const remove = async () => {
@@ -41,7 +41,8 @@ export function TeamTab({ project, role, reload, meta }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h3 className="font-heading text-lg font-semibold">Project team</h3><p className="text-sm text-muted-foreground">People with access to this project.</p></div>
-        {manager && <AddPeopleDialog project={project} reload={reload} />}
+        <div className="flex gap-2">{manager && <GeofenceButton project={project} reload={reload} />}
+          {manager && <AddPeopleDialog project={project} reload={reload} memberIds={Object.keys(members)} />}</div>
       </div>
       <div className="flex flex-wrap items-center gap-2"><Input className="max-w-xs" placeholder="Search team by name, role or job" value={q} onChange={(e) => setQ(e.target.value)} data-testid="team-search-input" />
         <span className="text-xs text-muted-foreground" data-testid="team-count">{matched.length} of {people.length} people</span></div>
@@ -69,14 +70,39 @@ export function TeamTab({ project, role, reload, meta }) {
   );
 }
 
-function AddPeopleDialog({ project, reload }) {
+function GeofenceButton({ project, reload }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ lat: project.geofence?.lat ?? "", lng: project.geofence?.lng ?? "", radius_m: project.geofence?.radius_m ?? 200 });
+  const here = () => navigator.geolocation?.getCurrentPosition((p) => setF({ ...f, lat: p.coords.latitude, lng: p.coords.longitude }), () => toast.error("Allow location access to use your current position."));
+  const save = async () => {
+    try { await api.put(`/projects/${project.id}/geofence`, { lat: Number(f.lat), lng: Number(f.lng), radius_m: Number(f.radius_m) }); toast.success("Site location saved"); setOpen(false); reload(); }
+    catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button variant="outline" data-testid="geofence-btn">{project.geofence ? "Site location ✓" : "Set site location"}</Button></DialogTrigger>
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Site location (geofence)</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">Used when a member's attendance requires site location.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1"><Label>Latitude</Label><Input value={f.lat} onChange={(e) => setF({ ...f, lat: e.target.value })} data-testid="geofence-lat" /></div>
+          <div className="space-y-1"><Label>Longitude</Label><Input value={f.lng} onChange={(e) => setF({ ...f, lng: e.target.value })} data-testid="geofence-lng" /></div>
+          <div className="col-span-2 space-y-1"><Label>Radius (metres, 20–5000)</Label><Input type="number" value={f.radius_m} onChange={(e) => setF({ ...f, radius_m: e.target.value })} data-testid="geofence-radius" /></div>
+        </div>
+        <DialogFooter><Button variant="outline" onClick={here} data-testid="geofence-here-btn">Use my location</Button>
+          <Button onClick={save} disabled={f.lat === "" || f.lng === ""} data-testid="geofence-save-btn">Save</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddPeopleDialog({ project, reload, memberIds = [] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [people, setPeople] = useState([]);
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState({});
   const [job, setJob] = useState("");
-  const onProject = new Set([project.project_manager_id, project.client_id, ...(project.engineer_ids || []), ...(project.team || []).filter((t) => !t.removed_at).map((t) => t.user_id)]);
+  const onProject = new Set([project.project_manager_id, project.client_id, ...(project.engineer_ids || []), ...(project.team || []).filter((t) => !t.removed_at).map((t) => t.user_id), ...memberIds]);
   useEffect(() => { if (open) { setPicked({}); setQ(""); api.get("/users").then((r) => setPeople(r.data.filter((u) => u.is_active !== false && u.role !== "admin" && !onProject.has(u.id) && !(u.role === "client" && project.client_id)))).catch(() => {}); } /* eslint-disable-next-line */ }, [open]);
   const shown = people.filter((u) => !q || `${u.name} ${u.email} ${ROLE_LABEL[u.role] || ""} ${u.designation || ""}`.toLowerCase().includes(q.toLowerCase()));
   const ids = Object.keys(picked).filter((k) => picked[k]);

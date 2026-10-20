@@ -31,7 +31,7 @@ export function TrialEnded() {
         {info.plans.map((p) => (
           <button key={p.id} type="button" onClick={() => setPlan(p.id)} className={`rounded-xl border p-5 text-left transition-colors ${plan === p.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`} data-testid={`trial-plan-${p.id}`}>
             <div className="flex items-center justify-between"><span className="font-heading text-lg font-semibold">{p.name}</span>{plan === p.id && <CheckCircle2 className="h-5 w-5 text-primary" />}</div>
-            <div className="font-mono text-2xl font-bold">{formatINR(p.price_monthly)}<span className="text-sm font-normal text-muted-foreground">/{p.billing_period || "month"}</span></div>
+            <div className="font-mono text-2xl font-bold">{formatINR(p.price_monthly)}<span className="text-sm font-normal text-muted-foreground">/{{ monthly: "month", quarterly: "quarter", yearly: "year" }[p.billing_period] || "month"}</span></div>
             <p className="text-sm text-muted-foreground">{p.description}</p>
             <p className="mt-2 text-xs">{p.max_users} users · {p.max_projects} projects · {p.max_storage_mb} MB storage</p>
           </button>))}

@@ -112,6 +112,7 @@ class TestBilling:
 
 
 # ---------------- Vehicles ----------------
+@pytest.mark.skip(reason='Obsolete after iter13 fleet redesign (accounts no longer manages vehicles; from/to_date schema). See test_iter13_subscription_fleet_access.py')
 class TestVehicles:
     state = {}
 

@@ -172,3 +172,15 @@ L. Photo persistence/preview + mobile nav.
 ## Backlog
 - P1: Ledger / payment reports export for Accounts (CSV/PDF), vehicle trip logs (km, fuel).
 - P2: Drawing markup comments; quotation → BOQ conversion on acceptance; backend refactor of server.py.
+
+## Implemented (2026-06, Stage 10 — Subscription lifecycle, Team, Fleet v2, Access control, Selfie attendance) ✅
+- Subscription lifecycle (all enterprises): trial/active/expired via subscription_info(); trial length chosen by Super Admin (create-enterprise trial_days, platform default_trial_days in Monetisation, "Trial & renewal" dialog: set trial end / extend / activate with renewal date). Expired → every API except /api/auth/* and /api/subscription/* returns 403 subscription_expired; full-page Trial ended screen (plans, payment instructions, Request activation); banner while on trial. Daily cron subscription-reminders-daily (7/3/1 days before, every 3 days after) with dedupe log subscription_email_log. No forced migration of existing enterprises (user choice).
+- Team: Add people multi-select for any role (admin all projects, PM managed projects), full list with search, team_history kept, site geofence button (both workspaces).
+- Fleet: only Owner + PM manage vehicles (/fleet). Request → PM approves → PM/Owner assigns vehicle (+optional driver user) → start → returned; overlap double-booking blocked; dashboard "Vehicles on site". Accounts page is Billing only.
+- Access control: 16 modules, levels None/View/Create/Edit/Approve (+Own only for attendance), role presets, tabs built from access, central backend enforcement in get_project_or_403 (URL→module), file downloads by type (photos/documents), contract value/cost only with billing view.
+- Selfie attendance: per-member Attendance required / Site location required; /my-attendance live selfie + GPS, private selfies, daily prompt, PM/admin team view.
+- Files: backend/subscription.py, backend/staff_attendance.py; tested iteration_13.
+
+## Backlog
+- P1: Dashboard cards fully driven by per-project access; shadcn date pickers instead of native date inputs.
+- P2: Ledger exports, trip logs (km/fuel), quotation → BOQ, server.py refactor.

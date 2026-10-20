@@ -52,7 +52,7 @@ ROUTE_MODULES = [("my-permissions", None), ("files/upload", None), ("geofence", 
                  ("attendance", "attendance"), ("material", "procurement"), ("purchase-order", "procurement"), ("supplier", "procurement"),
                  ("store", "store"), ("tool", "tools"), ("passes", "passes"), ("drawing", "documents"), ("document", "documents"),
                  ("report", "reports"), ("activities", "activities"), ("milestone", "progress"), ("progress", "progress"), ("target", "progress"),
-                 ("boq", "progress"), ("photos", "photos"), ("files/", "photos"), ("members", "team"), ("/team", "team"), ("/assign", "team")]
+                 ("boq", "progress"), ("photos", "photos"), ("members", "team"), ("/team", "team"), ("/assign", "team")]
 _APPROVE_WORDS = ("approve", "decision", "signoff", "review", "/pm", "verify", "/correct")
 
 
