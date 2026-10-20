@@ -172,6 +172,12 @@ async def decide_pass(xid: str, body: PassDecision, user: dict = Depends(C.comme
 # ---------------------------------------------------------------------------
 # Role dashboard
 # ---------------------------------------------------------------------------
+CARD_MODULE = {"store_approve": "store", "return_approve": "store", "to_issue": "store", "return_receive": "store", "shortage": "store",
+               "my_requests": "store", "tools_out": "tools", "dpr_review": "dpr", "my_dprs": "dpr", "passes": "passes", "pass_active": "passes",
+               "pass_pending": "passes", "bills_pm": "billing", "bills_owner": "billing", "bills_unpaid": "billing", "bills_rejected": "billing",
+               "trips_open": "vehicles", "trips_today": "vehicles", "trips_upcoming": "vehicles"}
+
+
 @router.get("/dashboard/role")
 async def role_dashboard(user: dict = Depends(C.commercial_user)):
     role, uid, cid = user["role"], user["id"], user["company_id"]
@@ -218,5 +224,14 @@ async def role_dashboard(user: dict = Depends(C.commercial_user)):
     names = {u["id"]: u["name"] async for u in S.db.users.find({"id": {"$in": list({t["engineer_id"] for t in targets})}}, {"_id": 0, "id": 1, "name": 1})}
     for t in targets:
         t["engineer_name"] = names.get(t["engineer_id"])
+    mods = await C.visible_modules(user, await S.list_projects(user))
+    cards = [c for c in cards if CARD_MODULE.get(c["key"]) in mods]
+    if "progress" not in mods:
+        targets = []
     return {"role": role, "role_label": S.ROLE_NAMES.get(role, role), "approver_label": S.ROLE_NAMES.get(S.APPROVER.get(role), ""),
-            "cards": cards, "targets": targets, "week_start": _monday()}
+            "cards": cards, "targets": targets, "week_start": _monday(), "modules": sorted(mods)}
+
+
+@router.get("/dashboard/modules")
+async def dashboard_modules(user: dict = Depends(S.get_current_user)):
+    return {"modules": sorted(await C.visible_modules(user, await S.list_projects(user)))}

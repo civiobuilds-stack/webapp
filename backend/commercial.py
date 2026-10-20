@@ -117,6 +117,18 @@ async def perms_for(user, project) -> Dict[str, List[str]]:
     return {k: sorted(set(explicit.get(k, [])) | set(preset.get(k, [])), key=ACTIONS.index) for k in PERM_MODULES}
 
 
+async def visible_modules(user, projects):
+    if user["role"] == "admin":
+        return set(PERM_MODULES)
+    mods = set()
+    for p in projects:
+        perms = await perms_for(user, p)
+        mods |= {m for m, acts in perms.items() if acts and ("view" in acts or m == "attendance")}
+    if user["role"] == "driver":
+        mods.add("vehicles")
+    return mods
+
+
 async def require_perm(user, project_id, module, action):
     project = await S.get_project_or_403(project_id, user)
     perms = await perms_for(user, project)

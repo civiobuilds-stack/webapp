@@ -183,3 +183,37 @@ async def cron_reminders(request: Request):
 @router.get("/superadmin/subscription-emails")
 async def email_log(sa: dict = Depends(sa_dep)):
     return await S.db.subscription_email_log.find({}, {"_id": 0}).sort("created_at", -1).to_list(300)
+
+
+# ---------------------------------------------------------------------------
+# Feature requests (any enterprise employee -> Super Admin list)
+# ---------------------------------------------------------------------------
+class FeatureIn(BaseModel):
+    title: str = Field(min_length=3, max_length=150)
+    description: str = Field(min_length=5, max_length=3000)
+    priority: str = "medium"
+
+
+@router.post("/feature-requests")
+async def create_feature(body: FeatureIn, user: dict = Depends(S.get_identity)):
+    if body.priority not in {"low", "medium", "high"}:
+        raise HTTPException(status_code=400, detail="Priority must be low, medium or high.")
+    ent = await S.db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0, "id": 1, "name": 1, "business_type": 1})
+    if not ent:
+        raise HTTPException(status_code=400, detail="No workspace")
+    doc = {"id": S.new_id(), **body.model_dump(), "title": body.title.strip(), "user_id": user["id"], "user_name": user["name"],
+           "user_email": user.get("email"), "user_phone": user.get("phone"), "user_role": S.ROLE_NAMES.get(user["role"], user["role"]),
+           "enterprise_id": ent["id"], "enterprise_name": ent["name"], "business_type": ent.get("business_type"), "created_at": S.now_iso()}
+    await S.db.feature_requests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@router.get("/feature-requests/mine")
+async def my_features(user: dict = Depends(S.get_identity)):
+    return await S.db.feature_requests.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@router.get("/superadmin/feature-requests")
+async def all_features(sa: dict = Depends(sa_dep)):
+    return await S.db.feature_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)

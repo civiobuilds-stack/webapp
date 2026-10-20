@@ -23,6 +23,7 @@ import Accounts from "@/pages/Accounts";
 import Trips from "@/pages/Trips";
 import Fleet from "@/pages/Fleet";
 import MyAttendance from "@/pages/MyAttendance";
+import FeatureRequest from "@/pages/FeatureRequest";
 import { SuperAdminRoute } from "@/components/ProtectedRoute";
 
 function Shell({ children }) {
@@ -79,6 +80,7 @@ function AppRouter() {
       <Route path="/accounts" element={<Shell><Accounts /></Shell>} />
       <Route path="/trips" element={<Shell><Trips /></Shell>} />
       <Route path="/fleet" element={<Shell><FleetPage /></Shell>} />
+      <Route path="/feature-request" element={<Shell><FeatureRequest /></Shell>} />
       <Route path="/my-attendance" element={<Shell><MyAttendance /></Shell>} />
       <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
       <Route path="/superadmin" element={<ProtectedRoute><SuperAdminRoute><AppShell><SuperAdmin /></AppShell></SuperAdminRoute></ProtectedRoute>} />

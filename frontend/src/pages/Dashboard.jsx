@@ -31,6 +31,8 @@ function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [mods, setMods] = useState(null);
+  useEffect(() => { if (user.role !== "client") api.get("/dashboard/modules").then((r) => setMods(r.data.modules)).catch(() => {}); }, [user.role]);
 
   useEffect(() => {
     Promise.all([api.get("/dashboard/summary"), api.get("/projects")])
@@ -71,10 +73,10 @@ function Dashboard() {
         </p>
       </div>
 
-      {!["site_engineer", "architect", "structural_engineer", "accounts", "driver"].includes(user.role) && <PendingMaterials role={user.role} />}
+      {!["site_engineer", "architect", "structural_engineer", "accounts", "driver"].includes(user.role) && (!mods || mods.includes("procurement")) && <PendingMaterials role={user.role} />}
       {user.enterprise?.business_type === "commercial" && user.role !== "client" && <RoleDashboard />}
       {["architect", "structural_engineer"].includes(user.role) && <DesignDashboard />}
-      {["admin", "project_manager"].includes(user.role) && (user.enterprise?.modules || []).includes("vehicles") && <FleetStatusCard />}
+      {["admin", "project_manager"].includes(user.role) && (user.enterprise?.modules || []).includes("vehicles") && (!mods || mods.includes("vehicles")) && <FleetStatusCard />}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)

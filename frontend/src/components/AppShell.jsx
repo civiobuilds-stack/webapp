@@ -9,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse, Receipt, Car, CalendarCheck } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse, Receipt, Car, CalendarCheck, Lightbulb } from "lucide-react";
 import { API, getToken } from "@/lib/api";
 import { refreshPush } from "@/lib/push";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/fleet", label: "Company Vehicles", icon: Car, testid: "nav-fleet", roles: ["admin", "project_manager"], module: "vehicles" },
   { to: "/my-attendance", label: "My Attendance", icon: CalendarCheck, testid: "nav-my-attendance", attendance: true },
   { to: "/trips", label: "My Trips", icon: Car, testid: "nav-trips", roles: ["driver"], module: "vehicles" },
+  { to: "/feature-request", label: "Request a feature", icon: Lightbulb, testid: "nav-feature-request", employee: true },
   { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
   { to: "/settings", label: "Company Settings", icon: Settings, testid: "nav-settings", adminOnly: true },
 ];
@@ -63,6 +64,7 @@ export function AppShell({ children }) {
       {nav.filter((n) => (!n.managerOnly || manager) && (!n.adminOnly || user?.role === "admin")
         && (!n.roles || (n.roles.includes(user?.role) && (user?.enterprise?.modules || []).includes(n.module)))
         && (!n.attendance || att?.enabled || att?.can_review)
+        && (!n.employee || (user?.role !== "client" && user?.platform_role !== "super_admin"))
         && (!n.commercialStaff || (user?.enterprise?.business_type === "commercial" && !["client", "driver"].includes(user?.role)))).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (

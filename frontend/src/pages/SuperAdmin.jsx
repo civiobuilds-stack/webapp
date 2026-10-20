@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Clock, CheckCircle2, IndianRupee, Search } from "lucide-react";
 import { EnterpriseRow } from "@/pages/superadmin/EnterpriseRow";
 import { PlansPanel } from "@/pages/superadmin/PlansPanel";
+import { FeatureRequestsPanel } from "@/pages/FeatureRequest";
 import { BillingSettingsCard } from "@/pages/superadmin/LifecycleDialog";
 
 function Stat({ icon: Icon, label, value, testid, accent }) {
@@ -121,9 +122,9 @@ export default function SuperAdmin() {
         <Stat icon={IndianRupee} label="Monthly recurring" value={ov ? formatINR(ov.mrr) : "–"} testid="sa-stat-mrr" />
       </div>
       <Tabs defaultValue="pending">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-3 lg:grid-cols-6">
           {[["pending", "Registration Approvals", `${ov?.by_status?.pending || 0} pending`], ["access", "Enterprise & Client Access", "Create, reset, suspend"],
-            ["plans", "Monetisation & Plans", "Pricing, billing, limits"], ["limits", "Limits & Subscription Status", "Usage and expiry"], ["audit", "Activity Log", "Platform actions"]].map(([v, l, sub]) => (
+            ["plans", "Monetisation & Plans", "Pricing, billing, limits"], ["limits", "Limits & Subscription Status", "Usage and expiry"], ["audit", "Activity Log", "Platform actions"], ["features", "Feature Requests", "Ideas from users"]].map(([v, l, sub]) => (
             <TabsTrigger key={v} value={v} className="flex h-auto flex-col items-start whitespace-normal rounded-xl border bg-card p-4 text-left data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid={`sa-tab-${v}`}>
               <span className="font-semibold">{l}</span><span className="text-xs opacity-70">{sub}</span></TabsTrigger>))}
         </TabsList>
@@ -132,6 +133,7 @@ export default function SuperAdmin() {
         <TabsContent value="limits" className="mt-5"><LimitsTable /></TabsContent>
         <TabsContent value="plans" className="mt-5 space-y-5"><BillingSettingsCard /><PlansPanel plans={plans} onSaved={loadPlans} /></TabsContent>
         <TabsContent value="audit" className="mt-5"><AuditPanel /></TabsContent>
+        <TabsContent value="features" className="mt-5"><FeatureRequestsPanel /></TabsContent>
       </Tabs>
     </div>
   );
