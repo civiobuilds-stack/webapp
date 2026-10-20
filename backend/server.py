@@ -7,7 +7,8 @@ load_dotenv(ROOT_DIR / ".env")
 
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+import contextvars
 from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Form, Header, Query
@@ -29,6 +30,7 @@ import httpx
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+REQ_CTX = contextvars.ContextVar("req_ctx", default=None)
 
 app = FastAPI(title="CIVIO BUILD API")
 api_router = APIRouter(prefix="/api")
@@ -83,7 +85,7 @@ def new_id() -> str:
 async def get_current_user(request: Request) -> dict:
     user = await get_identity(request)
     enforce_password_changed(user)
-    return await enforce_active_enterprise(user)
+    return await enforce_active_enterprise(user, request)
 
 
 def enforce_password_changed(user: dict):
@@ -92,13 +94,29 @@ def enforce_password_changed(user: dict):
                                                      "message": "Please change your password to continue."})
 
 
-async def enforce_active_enterprise(user: dict) -> dict:
+def subscription_info(ent: dict) -> dict:
+    if not ent or ent.get("id") == DEFAULT_ENTERPRISE_ID:
+        return {"state": "active", "base_state": "active", "end_date": None, "days_left": None, "expired": False}
+    st = ent.get("subscription_state") or "active"
+    end = ent.get("trial_end") if st == "trial" else ent.get("subscription_expires_at")
+    days = (date.fromisoformat(end[:10]) - datetime.now(timezone.utc).date()).days if end else None
+    expired = days is not None and days < 0
+    return {"state": "expired" if expired else st, "base_state": st, "end_date": end, "days_left": days, "expired": expired}
+
+
+async def enforce_active_enterprise(user: dict, request: Optional[Request] = None) -> dict:
     ent = await db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0})
     if not ent or ent.get("status") != "active":
         raise HTTPException(status_code=403, detail={
             "code": "enterprise_inactive", "status": (ent or {}).get("status", "missing"),
             "message": "Your company workspace is not active yet."})
     user["_enterprise"] = ent
+    if request is not None:
+        path = request.url.path
+        REQ_CTX.set((request.method, path))
+        if subscription_info(ent)["expired"] and user.get("platform_role") != "super_admin" and not path.startswith("/api/subscription"):
+            raise HTTPException(status_code=403, detail={"code": "subscription_expired",
+                                                         "message": "Your trial or subscription has ended. Renew to continue — your data is safe."})
     return user
 
 
@@ -112,7 +130,7 @@ async def user_from_query_token(request: Request, auth: Optional[str]) -> dict:
         if not u or not u.get("is_active", True) or await db.revoked_tokens.find_one({"jti": payload.get("jti")}):
             raise HTTPException(status_code=401, detail="Invalid token")
         enforce_password_changed(u)
-        return await enforce_active_enterprise(u)
+        return await enforce_active_enterprise(u, request)
     return await get_current_user(request)
 
 
@@ -143,8 +161,7 @@ async def ensure_company_users(ids, user: dict):
 
 async def enforce_limit(user: dict, kind: str):
     ent = user.get("_enterprise") or {}
-    exp = ent.get("subscription_expires_at")
-    if exp and exp < datetime.now(timezone.utc).date().isoformat() and ent.get("id") != DEFAULT_ENTERPRISE_ID:
+    if subscription_info(ent)["expired"]:
         raise HTTPException(status_code=403, detail={"code": "subscription_expired", "message": "Your subscription has expired. Contact CIVIO to renew before adding more."})
     limits = ent.get("limits") or {}
     cid = user["company_id"]
@@ -234,6 +251,14 @@ async def get_project_or_403(project_id: str, user: dict, write: bool = False) -
             t.get("user_id") == uid and not t.get("removed_at") for t in project.get("team", []))
     if not allowed:
         raise HTTPException(status_code=403, detail="You cannot access this project.")
+    ctx = REQ_CTX.get()
+    if ctx and role != "client":
+        import commercial as C
+        if not C._manages(user, project):
+            mod, act = C.route_module(*ctx)
+            have = (await C.perms_for(user, project)).get(mod, []) if mod else []
+            if mod and act not in have and not (mod == "attendance" and act == "view" and "create" in have):
+                raise HTTPException(status_code=403, detail=f"You do not have {act} access to {C.MODULE_LABELS[mod]} on this project. Ask your project manager.")
     return project
 
 
@@ -736,7 +761,9 @@ async def change_password(body: ChangePasswordIn, user: dict = Depends(get_ident
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_identity)):
     out = public_user(user)
-    out["enterprise"] = public_enterprise(await db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0}))
+    ent = await db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0})
+    out["enterprise"] = public_enterprise(ent)
+    out["subscription"] = subscription_info(ent) if ent else None
     return out
 
 
@@ -827,6 +854,9 @@ async def list_projects(user: dict = Depends(get_current_user)):
     projects = await db.projects.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for p in projects:
         await enrich_project(p)
+        if role not in {"admin", "accounts"} and not (role == "project_manager" and uid in (p.get("project_manager_id"), p.get("created_by"))) \
+                and not (role == "client" and p.get("client_budget_visible")):
+            p.pop("contract_value", None)
     return projects
 
 
@@ -857,7 +887,17 @@ async def create_project(body: ProjectIn, user: dict = Depends(require_roles("ad
 @api_router.get("/projects/{project_id}")
 async def get_project(project_id: str, user: dict = Depends(get_current_user)):
     p = await get_project_or_403(project_id, user)
-    return await enrich_project(p)
+    out = await enrich_project(p)
+    if not await can_see_cost(user, p):
+        out.pop("contract_value", None)
+    return out
+
+
+async def can_see_cost(user, project):
+    if user["role"] == "client":
+        return bool(project.get("client_budget_visible"))
+    import commercial as C
+    return "view" in (await C.perms_for(user, project)).get("billing", [])
 
 
 @api_router.put("/projects/{project_id}")
@@ -1880,9 +1920,12 @@ async def enterprise_with_usage(e: dict) -> dict:
         "projects": await db.projects.count_documents({"company_id": cid, "is_archived": {"$ne": True}}),
         "storage_mb": await storage_used_mb(cid),
     }
-    exp, today = e.get("subscription_expires_at"), datetime.now(timezone.utc).date()
-    e["subscription_state"] = "no_expiry" if not exp else "expired" if exp < today.isoformat() else \
-        "expiring_soon" if exp <= (today + timedelta(days=14)).isoformat() else "active"
+    sub = subscription_info(e)
+    e["subscription"] = sub
+    e["subscription_state"] = "expired" if sub["expired"] else "trial" if sub["base_state"] == "trial" else "no_expiry" if sub["end_date"] is None else \
+        "expiring_soon" if sub["days_left"] <= 14 else "active"
+    req = await db.activation_requests.find_one({"enterprise_id": e["id"], "status": "open"}, {"_id": 0, "created_at": 1})
+    e["activation_requested_at"] = (req or {}).get("created_at")
     return e
 
 
@@ -1925,6 +1968,8 @@ async def sa_set_status(eid: str, body: EnterpriseStatusIn, sa: dict = Depends(r
     update = {"status": body.status, "status_reason": body.reason or None, "status_updated_at": now_iso()}
     if body.status == "active" and not ent.get("approved_at"):
         update["approved_at"] = now_iso()
+        import subscription as SUB
+        await SUB.apply_default_trial(eid)
     await db.enterprises.update_one({"id": eid}, {"$set": update, "$push": {"status_history": {
         "from": ent.get("status"), "to": body.status, "reason": body.reason, "by": sa["name"], "at": now_iso()}}})
     await platform_audit(sa, f"enterprise -> {body.status}", eid, body.reason)
@@ -2005,6 +2050,10 @@ import superadmin  # noqa: E402
 api_router.include_router(superadmin.router)
 import phase2  # noqa: E402
 api_router.include_router(phase2.router)
+import subscription  # noqa: E402
+api_router.include_router(subscription.router)
+import staff_attendance  # noqa: E402
+api_router.include_router(staff_attendance.router)
 import billing  # noqa: E402
 api_router.include_router(billing.router)
 import quotations  # noqa: E402
@@ -2035,6 +2084,10 @@ async def migrate_multitenant():
         await db.files.update_one({"id": f["id"]}, {"$set": {"company_id": (src or {}).get("company_id", DEFAULT_ENTERPRISE_ID)}})
     await db.users.update_one({"email": os.environ["ADMIN_EMAIL"].lower()}, {"$set": {"platform_role": "super_admin"}})
     await db.enterprises.create_index("id", unique=True)
+    await db.staff_attendance.create_index([("user_id", 1), ("date", 1)], unique=True)
+    await db.subscription_email_log.create_index("key", unique=True)
+    async for t in db.vehicle_requests.find({"from_date": {"$exists": False}, "trip_date": {"$exists": True}}, {"_id": 0, "id": 1, "trip_date": 1, "drop": 1}):
+        await db.vehicle_requests.update_one({"id": t["id"]}, {"$set": {"from_date": t["trip_date"], "to_date": t["trip_date"], "destination": t.get("drop") or ""}})
     await db.projects.create_index([("company_id", 1), ("code", 1)])
     await db.files.create_index([("company_id", 1), ("is_deleted", 1)])
     await db.dprs.create_index([("project_id", 1), ("report_date", 1)], unique=True)

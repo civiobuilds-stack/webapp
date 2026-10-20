@@ -22,3 +22,11 @@ crons:
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     method: POST
     enabled: true
+  - name: subscription-reminders-daily
+    description: "Daily 10 AM IST trial/subscription expiry reminder emails (7/3/1 days before, then every 3 days after expiry)"
+    cron: "0 10 * * *"
+    timezone: "Asia/Kolkata"
+    endpoint: "{{BASE_URL}}/api/cron/subscription-reminders"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    method: POST
+    enabled: true

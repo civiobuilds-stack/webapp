@@ -41,7 +41,7 @@ export default function ProjectDetail() {
   const [tab, setTab] = useState(searchParams.get("tab") || "overview");
   useEffect(() => {
     const mods = user.enterprise?.modules || [];
-    if ((mods.includes("dpr") && user.role !== "client") || mods.includes("res_dpr"))
+    if (user.role !== "client" || mods.includes("res_dpr"))
       api.get(`/projects/${id}/my-permissions`).then((r) => setPerm(r.data)).catch(() => setPerm(null));
   }, [id, user]);
 
@@ -55,7 +55,7 @@ export default function ProjectDetail() {
   if (!project) return null;
 
   const manager = isManager(user.role);
-  const showValue = manager || project.client_budget_visible;
+  const showValue = project.contract_value != null;
   const hasProcurement = (user.enterprise?.modules || []).includes("procurement");
   const commercial = (user.enterprise?.modules || []).includes("dpr") && user.role !== "client";
   const mods = user.enterprise?.modules || [];
@@ -66,6 +66,13 @@ export default function ProjectDetail() {
   const hasDrawings = mods.includes("drawings");
   const manages = user.role === "admin" || (user.role === "project_manager" && (project.project_manager_id === user.id || project.created_by === user.id));
   const can = (m) => perm && (perm.permissions?.[m] || []).includes("view") && mods.includes(m);
+  const MOD = { materials: "procurement", drawings: "documents", members: "team", procurement: "procurement" };
+  const allow = (t) => {
+    if (user.role === "client" || perm?.manages || ["audit", "quotations"].includes(t.v)) return true;
+    if (!perm) return t.v === "overview";
+    const acts = perm.permissions?.[MOD[t.v] || t.v] || [];
+    return t.v === "attendance" ? acts.length > 0 : acts.includes("view");
+  };
   const tabs = [
     { v: "overview", l: "Overview" }, { v: "activities", l: "Activities" }, { v: "progress", l: "Progress" },
     hasInspection && { v: "inspection", l: "Inspection Checklist" }, resDpr && { v: "dpr", l: "DPR" },
@@ -74,7 +81,7 @@ export default function ProjectDetail() {
     manager && { v: "audit", l: "Audit Log" },
     ...(commercial && perm ? [{ v: "dpr", l: "DPR" }, { v: "attendance", l: "Attendance" }, { v: "store", l: "Store" }, { v: "members", l: "Members" },
       { v: "passes", l: "Site Passes" }, can("billing") && { v: "billing", l: "Billing" }, can("vehicles") && { v: "vehicles", l: "Vehicles" }] : []),
-  ].filter(Boolean);
+  ].filter(Boolean).filter(allow);
 
   if (user.role === "pass_coordinator") return (
     <div className="space-y-6"><h1 className="font-heading text-2xl font-bold">{project.name} <span className="font-mono text-sm text-muted-foreground">{project.code}</span></h1>
@@ -128,7 +135,7 @@ export default function ProjectDetail() {
         {hasProcurement && <TabsContent value="procurement" className="mt-5"><ProcurementTab project={project} role={user.role} /></TabsContent>}
         <TabsContent value="reports" className="mt-5"><ReportsTab project={project} role={user.role} /></TabsContent>
         <TabsContent value="photos" className="mt-5"><PhotosTab project={project} /></TabsContent>
-        <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} /></TabsContent>
+        <TabsContent value="team" className="mt-5"><TeamTab project={project} role={user.role} reload={load} meta={perm} /></TabsContent>
         {manager && <TabsContent value="audit" className="mt-5"><AuditTab project={project} /></TabsContent>}
         {commercial && perm && <>
           <TabsContent value="dpr" className="mt-5"><DprTab project={project} userId={user.id} perms={perm.permissions} manages={perm.manages} initialDpr={searchParams.get("dpr")} /></TabsContent>
@@ -137,7 +144,7 @@ export default function ProjectDetail() {
           <TabsContent value="passes" className="mt-5"><PassesTab project={project} role={user.role} manages={perm.manages} /></TabsContent>
           <TabsContent value="store" className="mt-5"><StoreTab project={project} perms={perm.permissions} meta={perm} /></TabsContent>
           {can("billing") && <TabsContent value="billing" className="mt-5"><BillingTab project={project} user={user} perms={perm.permissions} /></TabsContent>}
-          {can("vehicles") && <TabsContent value="vehicles" className="mt-5"><VehiclesTab project={project} user={user} perms={perm.permissions} /></TabsContent>}
+          {can("vehicles") && <TabsContent value="vehicles" className="mt-5"><VehiclesTab project={project} user={user} perms={perm.permissions} manages={manages} /></TabsContent>}
         </>}
       </Tabs>
     </div>

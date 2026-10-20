@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import server as S
+import commercial as C
 import emailer
 
 router = APIRouter()
@@ -122,6 +123,8 @@ async def _remove_from_project(p, uid, user, name):
 @router.post("/projects/{pid}/team")
 async def add_team(pid: str, body: TeamIn, user: dict = Depends(managers)):
     p = await S.get_project_or_403(pid, user, write=True)
+    if not C._manages(user, p):
+        raise HTTPException(status_code=403, detail="Only the admin or this project's manager can add people.")
     t = await S.db.users.find_one({"id": body.user_id, "company_id": user["company_id"], "is_active": {"$ne": False}}, {"_id": 0})
     if not t or t.get("platform_role") == "super_admin" and t["role"] == "admin":
         raise HTTPException(status_code=400, detail="Choose an active person from your company.")
@@ -140,7 +143,12 @@ async def add_team(pid: str, body: TeamIn, user: dict = Depends(managers)):
         await S.db.projects.update_one({"id": pid}, upd)
     await S.db.projects.update_one({"id": pid}, {"$pull": {"team": {"user_id": t["id"], "removed_at": None}}})
     entry = {"user_id": t["id"], **body.model_dump(exclude={"user_id"}), "added_by": user["id"], "added_at": S.now_iso(), "removed_at": None}
-    await S.db.projects.update_one({"id": pid}, {"$push": {"team": entry}})
+    await S.db.projects.update_one({"id": pid}, {"$push": {"team": entry, "team_history": {**entry, "action": "added"}}})
+    if t["role"] != "client" and not await S.db.project_members.find_one({"project_id": pid, "user_id": t["id"]}):
+        await S.db.project_members.insert_one({"project_id": pid, "user_id": t["id"], "company_id": user["company_id"], "responsibility": body.job_title or "",
+                                               "permissions": dict(C.ROLE_PRESETS.get(t["role"], C.DEFAULT_PRESET)), "access_v2": True,
+                                               "attendance_required": False, "location_required": False, "updated_by": user["id"],
+                                               "updated_at": S.now_iso(), "created_at": S.now_iso()})
     await S.log_audit(pid, user, "assigned person to project", "user", t["id"], f"{t['name']} as {body.job_title or S.ROLE_NAMES.get(t['role'])}")
     await S.notify(t["id"], "assignment", f"You were added to project {p['name']}" + (f" as {body.job_title}." if body.job_title else "."), pid)
     return await S.enrich_project(await S.db.projects.find_one({"id": pid}, {"_id": 0}))
@@ -149,12 +157,15 @@ async def add_team(pid: str, body: TeamIn, user: dict = Depends(managers)):
 @router.delete("/projects/{pid}/team/{uid}")
 async def remove_team(pid: str, uid: str, user: dict = Depends(managers)):
     p = await S.get_project_or_403(pid, user, write=True)
+    if not C._manages(user, p):
+        raise HTTPException(status_code=403, detail="Only the admin or this project's manager can remove people.")
     if p.get("project_manager_id") == uid:
         raise HTTPException(status_code=400, detail="Assign a different project manager before removing this one.")
     t = await S.db.users.find_one({"id": uid, "company_id": user["company_id"]}, {"_id": 0, "name": 1})
     if not t:
         raise HTTPException(status_code=404, detail="User not found")
     await _remove_from_project(p, uid, user, t["name"])
+    await S.db.projects.update_one({"id": pid}, {"$push": {"team_history": {"user_id": uid, "action": "removed", "by": user["id"], "at": S.now_iso()}}})
     await S.db.project_members.delete_one({"project_id": pid, "user_id": uid})
     return await S.enrich_project(await S.db.projects.find_one({"id": pid}, {"_id": 0}))
 

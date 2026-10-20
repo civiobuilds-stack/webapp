@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { UsageBar } from "@/components/PlanUsageCard";
 import { SubscriptionDialog } from "@/pages/superadmin/SubscriptionDialog";
+import { LifecycleDialog } from "@/pages/superadmin/LifecycleDialog";
 import { Home, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -92,6 +93,9 @@ export function EnterpriseRow({ ent, plans, onChanged }) {
             <p className="text-xs text-muted-foreground">Registered {formatDate(ent.created_at)} · {plan?.name || ent.plan_id} · {formatINR(ent.price_monthly)}/mo</p>
             <p className="text-xs" data-testid="sa-ent-subscription">Billing: <b>{(ent.billing_status || "manual").replace("_", " ")}</b> · {ent.billing_period || "monthly"} · {ent.subscription_expires_at ? `expires ${formatDate(ent.subscription_expires_at)}` : "no expiry set"}
               {ent.subscription_state && ent.subscription_state !== "no_expiry" && ent.subscription_state !== "active" && <Badge className={`ml-2 text-white ${ent.subscription_state === "expired" ? "bg-rose-600" : "bg-amber-500"}`} data-testid="sa-sub-state">{ent.subscription_state.replace("_", " ")}</Badge>}</p>
+            <p className="text-xs" data-testid="sa-ent-lifecycle">State: <b className="capitalize">{ent.subscription?.state || "active"}</b>
+              {ent.trial_end ? ` · trial ends ${formatDate(ent.trial_end)}` : ""}{ent.subscription?.base_state === "active" && ent.subscription_expires_at ? ` · renews ${formatDate(ent.subscription_expires_at)}` : ""}
+              {ent.activation_requested_at && <Badge className="ml-2 bg-sky-600 text-white" data-testid="sa-activation-requested">Activation requested {formatDate(ent.activation_requested_at)}</Badge>}</p>
             {ent.status_reason && <p className="mt-1 text-xs text-rose-700">Reason: {ent.status_reason}</p>}
           </div>
         </div>
@@ -100,6 +104,7 @@ export function EnterpriseRow({ ent, plans, onChanged }) {
           {ent.status === "pending" && <Button size="sm" variant="outline" onClick={() => setDlg("rejected")} data-testid="sa-reject-btn">Reject</Button>}
           {ent.status === "active" && ent.id !== "civio" && <Button size="sm" variant="outline" onClick={() => setDlg("suspended")} data-testid="sa-suspend-btn">Suspend</Button>}
           <Button size="sm" variant="secondary" onClick={() => setDlg("sub")} data-testid="sa-subscription-btn">Plan & limits</Button>
+          {ent.id !== "civio" && <Button size="sm" onClick={() => setDlg("life")} data-testid="sa-lifecycle-btn">Trial & renewal</Button>}
           {ent.id !== "civio" && <Button size="sm" variant="outline" onClick={() => setDlg("reset")} data-testid="sa-reset-owner-btn">Reset owner access</Button>}
           <Button size="sm" variant="ghost" onClick={() => setDlg("history")} data-testid="sa-history-btn">History</Button>
         </div>
@@ -112,6 +117,7 @@ export function EnterpriseRow({ ent, plans, onChanged }) {
       {(dlg === "rejected" || dlg === "suspended") && <ReasonDialog action={dlg} ent={ent} onClose={() => setDlg(null)} onDone={done} />}
       {dlg === "reset" && <ResetOwner ent={ent} onClose={() => setDlg(null)} />}
       {dlg === "history" && <HistoryDialog ent={ent} onClose={() => setDlg(null)} />}
+      {dlg === "life" && <LifecycleDialog ent={ent} onClose={() => setDlg(null)} onDone={done} />}
       {dlg === "sub" && <SubscriptionDialog ent={ent} plans={plans} onClose={() => setDlg(null)} onDone={done} />}
     </Card>
   );

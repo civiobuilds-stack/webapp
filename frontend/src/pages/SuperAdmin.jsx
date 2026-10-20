@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Clock, CheckCircle2, IndianRupee, Search } from "lucide-react";
 import { EnterpriseRow } from "@/pages/superadmin/EnterpriseRow";
 import { PlansPanel } from "@/pages/superadmin/PlansPanel";
+import { BillingSettingsCard } from "@/pages/superadmin/LifecycleDialog";
 
 function Stat({ icon: Icon, label, value, testid, accent }) {
   return (
@@ -57,12 +58,12 @@ function AuditPanel() {
 }
 
 function CreateEnterprise({ plans, onDone }) {
-  const blank = { company_name: "", business_type: "commercial", city: "", owner_name: "", owner_email: "", phone: "", plan_id: "free" };
+  const blank = { company_name: "", business_type: "commercial", city: "", owner_name: "", owner_email: "", phone: "", plan_id: "free", trial_days: "" };
   const [f, setF] = useState(blank);
   const [res, setRes] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const save = async () => {
-    try { const { data } = await api.post("/superadmin/enterprises", f); setRes(data); setF(blank); toast.success("Enterprise created"); onDone(); }
+    try { const { data } = await api.post("/superadmin/enterprises", { ...f, trial_days: f.trial_days ? Number(f.trial_days) : null }); setRes(data); setF(blank); toast.success("Enterprise created"); onDone(); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
   const sel = "h-9 rounded-md border bg-transparent px-2 text-sm";
@@ -74,6 +75,7 @@ function CreateEnterprise({ plans, onDone }) {
         <select className={sel} value={f.business_type} onChange={set("business_type")} data-testid="sa-create-type"><option value="commercial">Commercial</option><option value="residential">Residential</option></select>
         <Input placeholder="City" value={f.city} onChange={set("city")} />
         <select className={sel} value={f.plan_id} onChange={set("plan_id")} data-testid="sa-create-plan">{plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <Input type="number" min={1} placeholder="Trial days (blank = platform default / none)" value={f.trial_days} onChange={set("trial_days")} data-testid="sa-create-trial-days" />
         <Input placeholder="Owner name" value={f.owner_name} onChange={set("owner_name")} data-testid="sa-create-owner" />
         <Input placeholder="Owner email (login ID)" value={f.owner_email} onChange={set("owner_email")} data-testid="sa-create-email" />
         <Input placeholder="Phone" value={f.phone} onChange={set("phone")} />
@@ -128,7 +130,7 @@ export default function SuperAdmin() {
         <TabsContent value="pending" className="mt-5"><EnterpriseList status="pending" plans={plans} onChanged={loadOv} /></TabsContent>
         <TabsContent value="access" className="mt-5 space-y-4"><CreateEnterprise plans={plans} onDone={loadOv} /><EnterpriseList plans={plans} onChanged={loadOv} /></TabsContent>
         <TabsContent value="limits" className="mt-5"><LimitsTable /></TabsContent>
-        <TabsContent value="plans" className="mt-5"><PlansPanel plans={plans} onSaved={loadPlans} /></TabsContent>
+        <TabsContent value="plans" className="mt-5 space-y-5"><BillingSettingsCard /><PlansPanel plans={plans} onSaved={loadPlans} /></TabsContent>
         <TabsContent value="audit" className="mt-5"><AuditPanel /></TabsContent>
       </Tabs>
     </div>

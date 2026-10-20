@@ -10,6 +10,9 @@ export function AuthProvider({ children }) {
     if (window.location.hash?.includes("session_id=")) return;
     // Works for both JWT (Bearer) and Google (httpOnly session cookie).
     api.get("/auth/me").then((r) => setUser(r.data)).catch(() => { clearToken(); setUser(false); });
+    const onExpired = () => api.get("/auth/me").then((r) => setUser(r.data)).catch(() => {});
+    window.addEventListener("civio:expired", onExpired);
+    return () => window.removeEventListener("civio:expired", onExpired);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

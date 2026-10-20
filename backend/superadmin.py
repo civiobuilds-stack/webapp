@@ -1,5 +1,6 @@
 """Super Admin platform administration: create enterprises, owner access reset, approval history."""
 import secrets
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
@@ -18,6 +19,7 @@ class EnterpriseCreateIn(BaseModel):
     owner_email: EmailStr
     phone: str = ""
     plan_id: str = "free"
+    trial_days: Optional[int] = Field(default=None, ge=1, le=365)
 
 
 def _temp():
@@ -43,6 +45,8 @@ async def create_enterprise(body: EnterpriseCreateIn, sa: dict = Depends(sa_dep)
         "created_by_platform": sa["id"], "status_history": [{"from": None, "to": "active", "reason": "Created by Super Admin", "by": sa["name"], "at": ts}]})
     await S.db.users.insert_one({"id": uid, "email": email, "password_hash": S.hash_password(pw), "name": body.owner_name, "role": "admin",
                                  "phone": body.phone, "company_id": eid, "is_active": True, "is_demo": False, "email_verified": True, "must_change_password": True, "created_at": ts})
+    import subscription as SUB
+    await SUB.apply_default_trial(eid, body.trial_days)
     await S.platform_audit(sa, "enterprise created", eid, f"{body.company_name} owner {email}")
     return {"enterprise_id": eid, "login_id": email, "temporary_password": pw}
 

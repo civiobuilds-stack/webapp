@@ -17,9 +17,9 @@ export default function Trips() {
       <div><p className="text-xs font-semibold uppercase tracking-widest text-accent">Driver</p><h1 className="font-heading text-3xl font-bold">My trips</h1></div>
       <Card className="divide-y">
         {active.length === 0 && <p className="p-4 text-sm text-muted-foreground">No upcoming trips. You'll get a push notification when one is assigned.</p>}
-        {active.map((t) => <TripCard key={t.id} t={t} actions={t.status === "assigned"
-          ? <Button size="sm" onClick={() => act(t.id, "start")} data-testid="trip-start-btn"><Play className="h-4 w-4" /> Start trip</Button>
-          : <Button size="sm" onClick={() => act(t.id, "complete")} data-testid="trip-complete-btn"><CheckCircle2 className="h-4 w-4" /> Complete</Button>} />)}
+        {active.map((t) => <TripCard key={t.id} t={t} actions={<>
+          {t.status === "assigned" && <Button size="sm" variant="outline" onClick={() => act(t.id, "start")} data-testid="trip-start-btn"><Play className="h-4 w-4" /> Start</Button>}
+          <Button size="sm" onClick={() => act(t.id, "return")} data-testid="trip-return-btn"><CheckCircle2 className="h-4 w-4" /> Mark returned</Button></>} />)}
       </Card>
       {done.length > 0 && <><h2 className="font-heading font-semibold">History</h2><Card className="divide-y">{done.map((t) => <TripCard key={t.id} t={t} />)}</Card></>}
     </div>

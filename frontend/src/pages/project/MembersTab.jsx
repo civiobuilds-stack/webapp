@@ -17,10 +17,9 @@ const LEVELS = {
   create: { label: "Create", acts: ["view", "create", "submit"] },
   edit: { label: "Edit", acts: ["view", "create", "submit", "edit"] },
   approve: { label: "Approve", acts: ["view", "create", "submit", "edit", "approve", "export"] },
-  delete: { label: "Delete (full)", acts: ["view", "create", "submit", "edit", "approve", "export", "delete"] },
 };
 const PAGE = 10;
-const ENGINEER_DEFAULT = { dpr: ["view", "create", "edit", "submit"], attendance: ["view", "create"], store: ["view", "create"], vehicles: ["view", "create"] };
+
 const levelOf = (acts = []) => {
   const key = Object.keys(LEVELS).find((k) => LEVELS[k].acts.length === acts.length && LEVELS[k].acts.every((a) => acts.includes(a)));
   return key || "custom";
@@ -29,17 +28,21 @@ const permLabel = (perms) => Object.entries(perms || {}).filter(([, v]) => v.len
   const l = levelOf(v); return `${k}: ${l === "custom" ? v.join(", ") : LEVELS[l].label}`;
 }).join(" · ");
 
-function PermDialog({ project, meta, member, employees, onClose, onDone }) {
+const presetFor = (meta, role) => ({ ...((meta.presets || {})[role] || meta.default_preset || {}) });
+
+export function PermDialog({ project, meta, member, employees = [], onClose, onDone }) {
   const [uid, setUid] = useState(member?.user_id || "");
   const [resp, setResp] = useState(member?.responsibility || "");
-  const [perms, setPerms] = useState(member?.permissions || { dpr: ["view"], attendance: ["create"] });
+  const [perms, setPerms] = useState(member?.permissions || presetFor(meta, member?.user?.role));
+  const [att, setAtt] = useState(!!member?.attendance_required);
+  const [loc, setLoc] = useState(!!member?.location_required);
   const toggle = (m, a) => {
     const cur = perms[m] || [];
     setPerms({ ...perms, [m]: cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a] });
   };
   const setLevel = (m, l) => setPerms({ ...perms, [m]: [...LEVELS[l].acts] });
   const save = async () => {
-    try { await api.put(`/projects/${project.id}/members/${uid}`, { responsibility: resp, permissions: perms }); toast.success("Permissions saved"); onDone(); }
+    try { await api.put(`/projects/${project.id}/members/${uid}`, { responsibility: resp, permissions: perms, attendance_required: att, location_required: att && loc }); toast.success("Access saved"); onDone(); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
   return (
@@ -47,7 +50,7 @@ function PermDialog({ project, meta, member, employees, onClose, onDone }) {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{member ? "Edit member permissions" : "Assign employee to project"}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           {!member && <div className="space-y-1.5"><Label>Employee</Label>
-            <Select value={uid} onValueChange={(v) => { setUid(v); if ((project.engineer_ids || []).includes(v)) setPerms({ ...ENGINEER_DEFAULT }); }}><SelectTrigger data-testid="member-user-select"><SelectValue placeholder="Choose employee" /></SelectTrigger>
+            <Select value={uid} onValueChange={(v) => { setUid(v); setPerms(presetFor(meta, employees.find((e) => e.id === v)?.role)); }}><SelectTrigger data-testid="member-user-select"><SelectValue placeholder="Choose employee" /></SelectTrigger>
               <SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name} · {e.designation || ROLE_LABEL[e.role]}</SelectItem>)}</SelectContent></Select></div>}
           <div className="space-y-1.5"><Label>Project responsibility</Label><Input value={resp} onChange={(e) => setResp(e.target.value)} placeholder="e.g. Structural supervisor, Block A" data-testid="member-responsibility-input" /></div>
           <div className="space-y-2">
@@ -56,7 +59,7 @@ function PermDialog({ project, meta, member, employees, onClose, onDone }) {
               return (
                 <div key={m} className="rounded-lg border p-3" data-testid={`perm-module-${m}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium capitalize">{m}</span>
+                    <span className="font-medium">{meta.module_labels?.[m] || m}</span>
                     <Select value={lvl} onValueChange={(l) => l !== "custom" && setLevel(m, l)}>
                       <SelectTrigger className="w-44" data-testid={`perm-level-${m}`}><SelectValue /></SelectTrigger>
                       <SelectContent>{Object.entries(LEVELS).map(([k, v]) => <SelectItem key={k} value={k} data-testid={`perm-level-${m}-${k}`}>{v.label}</SelectItem>)}
@@ -68,7 +71,11 @@ function PermDialog({ project, meta, member, employees, onClose, onDone }) {
               );
             })}
           </div>
-          <p className="text-xs text-muted-foreground">Pick a level per module (No Access → Delete), or fine-tune with the boxes. Nothing is granted automatically.</p>
+          <div className="space-y-2 rounded-lg border p-3" data-testid="member-attendance-settings">
+            <label className="flex items-center gap-2 text-sm"><Checkbox checked={att} onCheckedChange={(v) => setAtt(!!v)} data-testid="member-attendance-required" />Attendance required (selfie check-in from "My Attendance")</label>
+            {att && <label className="flex items-center gap-2 pl-6 text-sm"><Checkbox checked={loc} onCheckedChange={(v) => setLoc(!!v)} data-testid="member-location-required" />Site location required (enforce this project's geofence)</label>}
+          </div>
+          <p className="text-xs text-muted-foreground">Role presets are applied when a person is added — change any module to None, View, Create, Edit or Approve. Tabs and data follow these settings.</p>
         </div>
         <DialogFooter><Button onClick={save} disabled={!uid} data-testid="member-save-btn">Save</Button></DialogFooter>
       </DialogContent>

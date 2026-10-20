@@ -21,6 +21,8 @@ import CompanySettings from "@/pages/CompanySettings";
 import SuperAdmin from "@/pages/SuperAdmin";
 import Accounts from "@/pages/Accounts";
 import Trips from "@/pages/Trips";
+import Fleet from "@/pages/Fleet";
+import MyAttendance from "@/pages/MyAttendance";
 import { SuperAdminRoute } from "@/components/ProtectedRoute";
 
 function Shell({ children }) {
@@ -76,6 +78,8 @@ function AppRouter() {
       <Route path="/store" element={<Shell><CompanyStore /></Shell>} />
       <Route path="/accounts" element={<Shell><Accounts /></Shell>} />
       <Route path="/trips" element={<Shell><Trips /></Shell>} />
+      <Route path="/fleet" element={<Shell><FleetPage /></Shell>} />
+      <Route path="/my-attendance" element={<Shell><MyAttendance /></Shell>} />
       <Route path="/notifications" element={<Shell><Notifications /></Shell>} />
       <Route path="/superadmin" element={<ProtectedRoute><SuperAdminRoute><AppShell><SuperAdmin /></AppShell></SuperAdminRoute></ProtectedRoute>} />
     </Routes>
@@ -96,3 +100,5 @@ function App() {
 }
 
 export default App;
+
+function FleetPage() { const { user } = useAuth(); return <Fleet user={user} />; }

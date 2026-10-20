@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (err) => {
+    if (err.response?.status === 403 && err.response?.data?.detail?.code === "subscription_expired") window.dispatchEvent(new Event("civio:expired"));
     if (err.response?.status === 401 && getToken()) {
       clearToken();
       if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";

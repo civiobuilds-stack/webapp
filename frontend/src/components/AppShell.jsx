@@ -9,17 +9,20 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse, Receipt, Car } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Bell, LogOut, HardHat, Menu, X, Users, ShieldCheck, Settings, Warehouse, Receipt, Car, CalendarCheck } from "lucide-react";
 import { API, getToken } from "@/lib/api";
 import { refreshPush } from "@/lib/push";
 import { cn } from "@/lib/utils";
+import { TrialEnded, SubscriptionBanner } from "@/components/TrialEnded";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/projects", label: "Projects", icon: FolderKanban, testid: "nav-projects" },
   { to: "/people", label: "People", icon: Users, testid: "nav-people", managerOnly: true },
   { to: "/store", label: "Company Store", icon: Warehouse, testid: "nav-store", commercialStaff: true },
-  { to: "/accounts", label: "Billing & Fleet", icon: Receipt, testid: "nav-accounts", roles: ["accounts", "admin"], module: "billing" },
+  { to: "/accounts", label: "Billing", icon: Receipt, testid: "nav-accounts", roles: ["accounts", "admin"], module: "billing" },
+  { to: "/fleet", label: "Company Vehicles", icon: Car, testid: "nav-fleet", roles: ["admin", "project_manager"], module: "vehicles" },
+  { to: "/my-attendance", label: "My Attendance", icon: CalendarCheck, testid: "nav-my-attendance", attendance: true },
   { to: "/trips", label: "My Trips", icon: Car, testid: "nav-trips", roles: ["driver"], module: "vehicles" },
   { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
   { to: "/settings", label: "Company Settings", icon: Settings, testid: "nav-settings", adminOnly: true },
@@ -35,6 +38,9 @@ export function AppShell({ children }) {
   const loadUnread = () => api.get("/notifications").then((r) => setUnread(r.data.unread)).catch(() => {});
   useEffect(() => { loadUnread(); }, [loc.pathname]);
   useEffect(() => { refreshPush(); }, []);
+  const [att, setAtt] = useState(null);
+  useEffect(() => { if (user && user.role !== "client" && !user.subscription?.expired) api.get("/my-attendance/status").then((r) => setAtt(r.data)).catch(() => {}); }, [user, loc.pathname]);
+  const expired = user?.subscription?.expired && user?.platform_role !== "super_admin";
 
   const manager = user?.role === "admin" || user?.role === "project_manager";
   const initials = (user?.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
@@ -56,6 +62,7 @@ export function AppShell({ children }) {
       )}
       {nav.filter((n) => (!n.managerOnly || manager) && (!n.adminOnly || user?.role === "admin")
         && (!n.roles || (n.roles.includes(user?.role) && (user?.enterprise?.modules || []).includes(n.module)))
+        && (!n.attendance || att?.enabled || att?.can_review)
         && (!n.commercialStaff || (user?.enterprise?.business_type === "commercial" && !["client", "driver"].includes(user?.role)))).map((n) => {
         const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to);
         return (
@@ -108,7 +115,12 @@ export function AppShell({ children }) {
       </header>
 
       <main className="lg:pl-64">
-        <div className="mx-auto max-w-[1500px] p-4 md:p-8">{children}</div>
+        <div className="mx-auto max-w-[1500px] p-4 md:p-8">{expired ? <TrialEnded /> : <>
+          <SubscriptionBanner sub={user?.subscription} />
+          {att?.needs_check_in && !loc.pathname.startsWith("/my-attendance") && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="checkin-prompt">
+            <span><CalendarCheck className="mr-1 inline h-4 w-4" /> You haven't checked in today.</span>
+            <Button size="sm" onClick={() => navigate("/my-attendance")} data-testid="checkin-prompt-btn">Check in now</Button></div>}
+          {children}</>}</div>
       </main>
     </div>
   );

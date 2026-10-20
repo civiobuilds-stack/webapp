@@ -21,7 +21,54 @@ router = APIRouter()
 log = logging.getLogger("civio.commercial")
 IST = ZoneInfo("Asia/Kolkata")
 
-PERM_MODULES = ["dpr", "attendance", "store", "progress", "procurement", "reports", "billing", "vehicles"]
+MODULE_LABELS = {"overview": "Overview", "activities": "Activities", "progress": "Progress", "dpr": "DPR", "inspection": "Inspection",
+                 "procurement": "Materials & Procurement", "store": "Store & Inventory", "tools": "Tools", "attendance": "Attendance",
+                 "passes": "Site Passes", "documents": "Documents", "billing": "Billing & Cost", "vehicles": "Vehicles", "reports": "Reports",
+                 "photos": "Photos", "team": "Team"}
+PERM_MODULES = list(MODULE_LABELS)
+_V, _C, _E, _A = ["view"], ["view", "create", "submit"], ["view", "create", "submit", "edit"], ["view", "create", "submit", "edit", "approve", "export"]
+_BASE = {"overview": _V, "team": _V, "photos": _V, "attendance": ["create"]}
+ROLE_PRESETS = {
+    "site_engineer": {**_BASE, "activities": _E, "progress": _E, "dpr": _E, "inspection": _E, "store": _C, "procurement": _C, "photos": _C,
+                      "tools": _C, "documents": _V, "reports": ["view", "create"], "vehicles": _C, "passes": _C},
+    "project_manager": {**_BASE, "activities": _E, "progress": _E, "dpr": _E, "inspection": _E, "store": _C, "procurement": _C, "photos": _C,
+                        "tools": _C, "documents": _C, "reports": ["view", "create"], "vehicles": _C, "passes": _C},
+    "store_incharge": {**_BASE, "store": _A, "procurement": _V, "vehicles": _V, "tools": _A},
+    "store_manager": {**_BASE, "store": _A, "procurement": _V, "vehicles": _V, "tools": _A, "reports": _V},
+    "accounts": {**_BASE, "billing": ["view", "create", "submit", "edit", "export"], "procurement": _V, "reports": _V, "vehicles": _V},
+    "safety_engineer": {**_BASE, "inspection": _E, "activities": _V, "progress": _V, "dpr": _V, "photos": _C, "passes": _V, "reports": _V},
+    "safety_manager": {**_BASE, "inspection": _A, "activities": _V, "progress": _V, "dpr": _V, "photos": _C, "passes": _A, "reports": _V},
+    "quality_engineer": {**_BASE, "inspection": _E, "activities": _V, "progress": _V, "dpr": _V, "photos": _C, "reports": _V},
+    "quality_manager": {**_BASE, "inspection": _A, "activities": _V, "progress": _V, "dpr": _V, "photos": _C, "reports": _V},
+    "pass_coordinator": {**_BASE, "passes": _A},
+    "driver": {**_BASE, "vehicles": _V},
+    "architect": {**_BASE, "documents": _C, "progress": _V, "activities": _V, "reports": _V},
+    "structural_engineer": {**_BASE, "documents": _C, "progress": _V, "activities": _V, "reports": _V, "inspection": _V},
+}
+DEFAULT_PRESET = {**_BASE, "dpr": _V, "activities": _V, "progress": _V}
+ROUTE_MODULES = [("my-permissions", None), ("files/upload", None), ("geofence", None), ("quotation", None), ("audit-log", None), ("/delete", None),
+                 ("/archive", None), ("bills", "billing"), ("cost-summary", "billing"), ("labour-cost", "billing"), ("wages", "billing"),
+                 ("vehicle", "vehicles"), ("inspection", "inspection"), ("defect", "inspection"), ("dpr", "dpr"), ("labour", "attendance"),
+                 ("attendance", "attendance"), ("material", "procurement"), ("purchase-order", "procurement"), ("supplier", "procurement"),
+                 ("store", "store"), ("tool", "tools"), ("passes", "passes"), ("drawing", "documents"), ("document", "documents"),
+                 ("report", "reports"), ("activities", "activities"), ("milestone", "progress"), ("progress", "progress"), ("target", "progress"),
+                 ("boq", "progress"), ("photos", "photos"), ("files/", "photos"), ("members", "team"), ("/team", "team"), ("/assign", "team")]
+_APPROVE_WORDS = ("approve", "decision", "signoff", "review", "/pm", "verify", "/correct")
+
+
+def route_module(method, path):
+    p = path.lower()
+    mod = next((m for k, m in ROUTE_MODULES if k in p), "missing")
+    if mod == "missing":
+        parts = p.strip("/").split("/")
+        mod = "overview" if len(parts) == 3 and parts[1] == "projects" else None
+    if not mod:
+        return None, None
+    if method == "GET":
+        return mod, "view"
+    if any(w in p for w in _APPROVE_WORDS):
+        return mod, "approve"
+    return mod, "edit" if method in {"PUT", "PATCH", "DELETE"} else "create"
 ACTIONS = ["view", "create", "edit", "submit", "approve", "export", "delete"]
 ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"], "store": ["view", "create"], "vehicles": ["view", "create"]}
 MEMBER_DEFAULT = {"dpr": ["view"], "attendance": ["create"]}
@@ -60,18 +107,14 @@ def _manages(user, project):
 async def perms_for(user, project) -> Dict[str, List[str]]:
     if _manages(user, project):
         return {m: list(ACTIONS) for m in PERM_MODULES}
+    if user["role"] == "client":
+        return {"dpr": ["view"]} if project.get("client_id") == user["id"] else {}
+    preset = ROLE_PRESETS.get(user["role"], DEFAULT_PRESET)
     m = await S.db.project_members.find_one({"project_id": project["id"], "user_id": user["id"]}, {"_id": 0})
-    if m:
-        return m.get("permissions") or {}
-    if user["id"] in project.get("engineer_ids", []):
-        return ENGINEER_DEFAULT
-    if user["role"] == "client" and project.get("client_id") == user["id"]:
-        return {"dpr": ["view"]}
-    if user["role"] in {"store_incharge", "store_manager"}:
-        return {"store": ["view", "export"]}
-    if user["role"] == "accounts":
-        return {"billing": ["view", "create", "edit", "submit", "export"], "vehicles": list(ACTIONS)}
-    return {}
+    explicit = (m or {}).get("permissions") or {}
+    if m and m.get("access_v2"):
+        return {k: list(explicit.get(k, [])) for k in PERM_MODULES}
+    return {k: sorted(set(explicit.get(k, [])) | set(preset.get(k, [])), key=ACTIONS.index) for k in PERM_MODULES}
 
 
 async def require_perm(user, project_id, module, action):
@@ -191,10 +234,12 @@ async def update_employee(uid: str, body: EmployeeIn, user: dict = Depends(comme
 class MemberIn(BaseModel):
     responsibility: str = ""
     permissions: Optional[Dict[str, List[str]]] = None
+    attendance_required: Optional[bool] = None
+    location_required: Optional[bool] = None
 
 
 @router.get("/projects/{pid}/members")
-async def list_members(pid: str, user: dict = Depends(commercial_user)):
+async def list_members(pid: str, user: dict = Depends(dpr_user)):
     await S.get_project_or_403(pid, user)
     ms = await S.db.project_members.find({"project_id": pid}, {"_id": 0}).to_list(500)
     umap = {u["id"]: S.public_user(u) for u in await S.db.users.find({"id": {"$in": [m["user_id"] for m in ms]}}, {"_id": 0}).to_list(500)}
@@ -205,11 +250,12 @@ async def list_members(pid: str, user: dict = Depends(commercial_user)):
 async def my_permissions(pid: str, user: dict = Depends(dpr_user)):
     project = await S.get_project_or_403(pid, user)
     return {"permissions": await perms_for(user, project), "manages": _manages(user, project),
-            "modules": PERM_MODULES, "actions": ACTIONS, "store_staff": user["role"] in {"store_incharge", "store_manager", "admin"}}
+            "modules": PERM_MODULES, "module_labels": MODULE_LABELS, "actions": ACTIONS, "presets": ROLE_PRESETS, "default_preset": DEFAULT_PRESET,
+            "store_staff": user["role"] in {"store_incharge", "store_manager", "admin"}}
 
 
 @router.put("/projects/{pid}/members/{uid}")
-async def upsert_member(pid: str, uid: str, body: MemberIn, user: dict = Depends(commercial_user)):
+async def upsert_member(pid: str, uid: str, body: MemberIn, user: dict = Depends(dpr_user)):
     project = await S.get_project_or_403(pid, user)
     if not _manages(user, project):
         raise HTTPException(status_code=403, detail="Only the company admin or this project's manager can manage members.")
@@ -217,9 +263,14 @@ async def upsert_member(pid: str, uid: str, body: MemberIn, user: dict = Depends
     if not target or target["role"] == "client":
         raise HTTPException(status_code=400, detail="Only company employees can be project members.")
     existing = await S.db.project_members.find_one({"project_id": pid, "user_id": uid})
-    perms = _clean_perms(body.permissions) if body.permissions is not None else (existing or {}).get("permissions", MEMBER_DEFAULT)
+    if body.permissions is not None:
+        perms, v2 = _clean_perms(body.permissions), True
+    else:
+        perms, v2 = (existing or {}).get("permissions") or dict(ROLE_PRESETS.get(target["role"], DEFAULT_PRESET)), (existing or {}).get("access_v2", True)
     doc = {"project_id": pid, "user_id": uid, "company_id": user["company_id"], "responsibility": body.responsibility,
-           "permissions": perms, "updated_by": user["id"], "updated_at": S.now_iso()}
+           "permissions": perms, "access_v2": v2, "updated_by": user["id"], "updated_at": S.now_iso(),
+           "attendance_required": body.attendance_required if body.attendance_required is not None else (existing or {}).get("attendance_required", False),
+           "location_required": body.location_required if body.location_required is not None else (existing or {}).get("location_required", False)}
     await S.db.project_members.update_one({"project_id": pid, "user_id": uid}, {"$set": doc, "$setOnInsert": {"created_at": S.now_iso()}}, upsert=True)
     await S.log_audit(pid, user, "updated member permissions" if existing else "added project member", "member", uid,
                       f"{target['name']}: {json.dumps(perms)}")
@@ -229,7 +280,7 @@ async def upsert_member(pid: str, uid: str, body: MemberIn, user: dict = Depends
 
 
 @router.delete("/projects/{pid}/members/{uid}")
-async def remove_member(pid: str, uid: str, user: dict = Depends(commercial_user)):
+async def remove_member(pid: str, uid: str, user: dict = Depends(dpr_user)):
     project = await S.get_project_or_403(pid, user)
     if not _manages(user, project):
         raise HTTPException(status_code=403, detail="Not allowed.")
