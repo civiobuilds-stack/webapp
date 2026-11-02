@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileDown, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
+import { openPath } from "@/components/AuthImage";
 
 const inr = (v) => `₹${Math.round(v).toLocaleString("en-IN")}`;
 
@@ -39,7 +40,7 @@ export function LabourCostPanel({ project, manages }) {
     <Card className="space-y-4 p-5" data-testid="labour-cost-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-1 font-heading font-bold"><IndianRupee className="h-4 w-4" /> Labour cost · {c.month}</h3>
-        <a href={`${API}/projects/${project.id}/labour-cost/pdf?auth=${getToken()}`} target="_blank" rel="noreferrer"><Button size="sm" variant="secondary" data-testid="project-labour-cost-pdf-btn"><FileDown className="h-4 w-4" /> PDF</Button></a>
+        <a href="#" onClick={(e) => { e.preventDefault(); openPath(`/projects/${project.id}/labour-cost/pdf`); }}><Button size="sm" variant="secondary" data-testid="project-labour-cost-pdf-btn"><FileDown className="h-4 w-4" /> PDF</Button></a>
       </div>
       <p className="text-xs text-muted-foreground">Rates in use: mason {inr(c.rates.mason_rate)}/day · helper {inr(c.rates.helper_rate)}/day{wages.override.mason_rate != null || wages.override.helper_rate != null ? " (project override)" : " (company default)"}</p>
       <div className="grid gap-3 sm:grid-cols-2">

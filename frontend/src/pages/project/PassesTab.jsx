@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { CameraCapture } from "@/components/CameraCapture";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
+import { AuthImage } from "@/components/AuthImage";
 
 const COLOR = { active: "bg-emerald-600", pending: "bg-amber-500", rejected: "bg-rose-600", revoked: "bg-slate-500" };
 const today = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
@@ -52,7 +53,7 @@ export function PassesTab({ project, role, manages }) {
         {staff && <Button onClick={() => setOpen(true)} data-testid="new-pass-btn"><Plus className="h-4 w-4" /> New pass</Button>}</div>
       {items.length === 0 ? <Card className="p-10 text-center text-muted-foreground">No passes yet.</Card> : <div className="grid gap-3 sm:grid-cols-2">{items.map((p) => (
         <Card key={p.id} className="flex gap-3 p-4" data-testid="pass-card">
-          {p.photo_ids?.[0] && <img src={fileUrl(p.photo_ids[0])} alt="" className="h-20 w-16 rounded-md object-cover" />}
+          {p.photo_ids?.[0] && <AuthImage thumb viewer={false} fileId={p.photo_ids[0]} alt="" className="h-20 w-16 rounded-md object-cover" />}
           <div className="min-w-0 flex-1"><div className="flex items-center gap-2 font-mono text-xs"><BadgeCheck className="h-4 w-4" /> {p.pass_no}</div>
             <div className="font-medium">{p.person_name} <span className="text-xs capitalize text-muted-foreground">· {p.pass_type}{p.trade ? ` · ${p.trade}` : ""}</span></div>
             <div className="text-xs text-muted-foreground">{p.phone ? `${p.phone} · ` : ""}Valid {formatDate(p.valid_from)} – {formatDate(p.valid_to)}</div>

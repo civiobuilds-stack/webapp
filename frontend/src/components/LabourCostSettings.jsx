@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileDown, Send, BellRing } from "lucide-react";
 import { toast } from "sonner";
+import { openPath } from "@/components/AuthImage";
 
 export function LabourCostSettings() {
   const [w, setW] = useState(null);
@@ -36,7 +37,7 @@ export function LabourCostSettings() {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={save} data-testid="wage-save-btn">Save rates</Button>
-        <a href={`${API}/labour-cost/pdf?auth=${getToken()}`} target="_blank" rel="noreferrer"><Button variant="outline" data-testid="labour-cost-pdf-btn"><FileDown className="h-4 w-4" /> Download PDF</Button></a>
+        <a href="#" onClick={(e) => { e.preventDefault(); openPath(`/labour-cost/pdf`); }}><Button variant="outline" data-testid="labour-cost-pdf-btn"><FileDown className="h-4 w-4" /> Download PDF</Button></a>
         <Button variant="outline" onClick={sendNow} data-testid="labour-cost-send-btn"><Send className="h-4 w-4" /> Email report now</Button>
         <Button variant="ghost" onClick={remind} data-testid="tool-remind-now-btn"><BellRing className="h-4 w-4" /> Send overdue tool reminders</Button>
       </div>

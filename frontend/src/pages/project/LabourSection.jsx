@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { CameraCapture } from "@/components/CameraCapture";
+import { AuthImage } from "@/components/AuthImage";
 import { MapPin, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
@@ -76,7 +77,8 @@ export function LabourSection({ project, perms, manages, month }) {
       <p className="text-sm">This month: <b>{d.totals.masons}</b> mason-days · <b>{d.totals.helpers}</b> helper-days</p>
       <div className="divide-y rounded-lg border">{d.rows.map((r) => (
         <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm" data-testid="labour-row">
-          <span><b>{r.labour_incharge}</b> · {formatDate(r.date)} · {r.masons} masons · {r.helpers} helpers · in {r.check_in.distance_m} m from site</span>
+          <span className="flex items-center gap-2">{[r.check_in?.photo_id, r.check_out?.photo_id].filter(Boolean).map((id) => <AuthImage key={id} thumb fileId={id} className="h-10 w-10 rounded object-cover" alt="labour" />)}
+            <span><b>{r.labour_incharge}</b> · {formatDate(r.date)} · {r.masons} masons · {r.helpers} helpers · in {r.check_in.distance_m} m from site</span></span>
           {r.check_out ? <span className="text-xs text-muted-foreground">out · {r.check_out.masons}M/{r.check_out.helpers}H</span>
             : create && <Button size="sm" variant="outline" onClick={() => setDlg(r)} data-testid="labour-checkout-btn"><LogOut className="h-4 w-4" /> Check out</Button>}
         </div>))}</div>

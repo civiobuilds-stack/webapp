@@ -184,3 +184,17 @@ L. Photo persistence/preview + mobile nav.
 ## Backlog
 - P1: Dashboard cards fully driven by per-project access; shadcn date pickers instead of native date inputs.
 - P2: Ledger exports, trip logs (km/fuel), quotation → BOQ, server.py refactor.
+
+## Implemented (2026-11, Batch A — photos, labour, weekly report, digest) ✅
+- Root cause of broken photos: frontend appended `?auth=<localStorage token>`; cookie/Google sessions had no token → `?auth=null` → 401. Storage healthy (repair dry run: 94 OK, 0 missing).
+- AuthImage (axios blob, cache, spinner, Retry) + global FileViewer (zoom, download, PDF iframe) + openFile/openPath used everywhere; fileUrl removed; `?auth=` no longer accepted (cookie/Bearer only).
+- Download: to_thread, ETag/304, Cache-Control private, logged 502; /files/{id}/thumb 400px JPEG (cached in background); HEIC/HEIF → JPEG on upload; magic-byte validation, 15 MB limit. storage.get_object: (5,15)s timeout + retry + session.
+- backend/scripts/repair_files.py (dry run default, --apply updates DB only, never deletes).
+- Labour attendance for site engineers in both workspaces (residential "Labour Attendance" tab); labour rows show photos.
+- Weekly Progress Report from DPRs with PM-selectable sections (saved per project); open defects only in completion report.
+- Digest: PM + owner edit recipients and extra email addresses (Reports tab + Company settings).
+- Feature requests blocked for clients/super admin.
+
+## Next — Batch B / C (pending, user approved order)
+- B: CORS without "*", cookie-only JWT, no auto-verify, hashed OTP, no demo seeding in prod + remove test_credentials from repo, push prompt after login, attendance on by default (+manual correction/audit, accuracy-aware geofence), cost summary lock, remove client approval of activities/progress.
+- C: material request fields/edit/date picker/client masking, inspection corrective actions + IR PDF with client decision + failed items list, company client-visibility toggles.

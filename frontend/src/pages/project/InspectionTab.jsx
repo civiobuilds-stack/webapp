@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { FileDown, Loader2, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
+import { openPath } from "@/components/AuthImage";
 
 const ST = { pass: ["Pass", "bg-emerald-600"], fail: ["Fail", "bg-rose-600"], na: ["N/A", "bg-slate-500"], pending: ["Pending", "bg-amber-500"] };
 
@@ -67,7 +68,7 @@ export function InspectionTab({ project, role }) {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [project.id]);
   const report = async () => {
     setBusy(true);
-    try { const { data } = await api.post(`/projects/${project.id}/inspection/report`); toast.success("Inspection report generated"); window.open(`${API}/reports/${data.id}/download?auth=${getToken()}`, "_blank"); }
+    try { const { data } = await api.post(`/projects/${project.id}/inspection/report`); toast.success("Inspection report generated"); openPath(`/reports/${data.id}/download`); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setBusy(false); }
   };
   if (!d) return null;

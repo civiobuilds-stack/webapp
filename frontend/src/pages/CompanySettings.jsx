@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DigestSettingsCard } from "@/components/DigestSettingsCard";
 import { LabourCostSettings } from "@/components/LabourCostSettings";
 import { BrandLoader } from "@/components/BrandLoader";
+import { AuthImage } from "@/components/AuthImage";
 
 const FIELDS = [
   ["display_name", "Company name (shown on reports)"], ["tagline", "Tagline"], ["contact_email", "Contact email"],
@@ -37,7 +38,7 @@ function LogoCard({ hasLogo, onChange }) {
       <p className="text-sm text-muted-foreground">Appears on PDF reports and in your workspace. PNG or JPG, under 2 MB.</p>
       <div className="mt-4 flex items-center gap-4">
         <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-xl border bg-muted/40">
-          {hasLogo ? <img src={`${API}/enterprise/logo?auth=${getToken()}&v=${v}`} alt="Company logo" className="h-full w-full object-contain p-1" data-testid="logo-preview" />
+          {hasLogo ? <AuthImage viewer={false} path={`/enterprise/logo?v=${v}`} alt="Company logo" className="h-full w-full object-contain p-1" data-testid="logo-preview" />
             : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
         </div>
         <div className="flex flex-col gap-2">

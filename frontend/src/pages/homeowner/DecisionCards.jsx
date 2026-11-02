@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ThumbsUp, MessageSquareWarning, Loader2, PartyPopper } from "lucide-react";
 import { toast } from "sonner";
+import { AuthImage } from "@/components/AuthImage";
 
 function DecisionDialog({ update, action, onClose, onDone }) {
   const [comment, setComment] = useState(action === "approve" ? "Looks good, approved." : "");
@@ -33,7 +34,7 @@ function DecisionCard({ u, onPick }) {
   return (
     <Card className="overflow-hidden border-2 border-[hsl(222_100%_56%)]/30" data-testid="home-decision-card">
       <div className="flex flex-col sm:flex-row">
-        {photo && <img src={fileUrl(photo.id)} alt="Work evidence" className="h-40 w-full object-cover sm:h-auto sm:w-48" />}
+        {photo && <AuthImage thumb viewer={false} fileId={photo.id} alt="Work evidence" className="h-40 w-full object-cover sm:h-auto sm:w-48" />}
         <div className="flex-1 p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-[hsl(222_100%_56%)]">Awaiting your approval</p>
           <h3 className="mt-1 font-heading text-xl font-bold">{u.activity?.name || "Work update"} — {u.percent_complete}% done</h3>

@@ -282,6 +282,40 @@ def build_labour_cost(projects, meta, brand):
     return buf.getvalue()
 
 
+def _weekly_sections(ctx, styles):
+    dprs, sec, out = ctx.get("dprs", []), ctx.get("sections", []), []
+    if not dprs:
+        return [Paragraph("No submitted DPRs in this period.", styles["CivMuted"])]
+    if "progress" in sec:
+        out.append(Paragraph("Weekly Progress (from DPRs)", styles["CivH2"]))
+        out.append(_data_table(["Date", "Status", "Weather", "Activities", "Manpower"], [[
+            _fmt_date(d.get("report_date")), (d.get("status") or "").replace("_", " "), d.get("weather") or "—",
+            str(len(d.get("activities", []))), f"{sum(m.get('count', 0) for m in d.get('manpower', [])):g}"] for d in dprs], styles,
+            [28 * mm, 30 * mm, 30 * mm, 40 * mm, 42 * mm]))
+    if "work_done" in sec:
+        rows = [[_fmt_date(d.get("report_date")), a.get("description", ""), f"{a.get('actual_qty', a.get('done_qty', 0)) or 0:g} {a.get('unit', '')}"]
+                for d in dprs for a in d.get("activities", [])] or [["—", "No activities recorded", ""]]
+        out += [Paragraph("Work Done", styles["CivH2"]), _data_table(["Date", "Activity", "Quantity"], rows, styles, [28 * mm, 110 * mm, 32 * mm])]
+    if "labour" in sec:
+        tot = {}
+        for d in dprs:
+            for m in d.get("manpower", []):
+                tot[m.get("name", "")] = tot.get(m.get("name", ""), 0) + (m.get("count") or 0)
+        rows = [[k, f"{v:g}"] for k, v in tot.items()] or [["No manpower recorded", ""]]
+        out += [Paragraph("Labour (man-days this week)", styles["CivH2"]), _data_table(["Trade", "Man-days"], rows, styles, [120 * mm, 50 * mm])]
+    if "materials" in sec:
+        rows = [[_fmt_date(d.get("report_date")), m.get("item", ""), f"{m.get('quantity', 0):g} {m.get('unit', '')}", m.get("status", "")]
+                for d in dprs for m in d.get("materials", [])] or [["—", "No materials recorded", "", ""]]
+        out += [Paragraph("Materials Used / Received", styles["CivH2"]), _data_table(["Date", "Material", "Quantity", "Status"], rows, styles, [28 * mm, 80 * mm, 35 * mm, 27 * mm])]
+    for key, title, field in [("issues", "Issues & Hindrances", ("delays", "safety_notes", "quality_notes")), ("next_week", "Next Week Plan", ("next_day_plan",))]:
+        if key in sec:
+            lines = [f"<b>{_fmt_date(d.get('report_date'))}:</b> {d.get(f)}" for d in dprs for f in field if d.get(f)]
+            out.append(Paragraph(title, styles["CivH2"]))
+            out.append(Paragraph("<br/>".join(lines) if lines else "Nothing reported.", styles["CivBody"]))
+    out.append(Spacer(1, 6))
+    return out
+
+
 def build_report(report_type, ctx):
     """ctx: dict with project, meta, activities, milestones, progress, defects, photos, cost."""
     buf = io.BytesIO()
@@ -335,13 +369,17 @@ def build_report(report_type, ctx):
                                  [52 * mm, 20 * mm, 32 * mm, 36 * mm, 24 * mm]))
         story.append(Spacer(1, 6))
 
-    story.append(Paragraph("Outstanding Issues — Open Defects", styles["CivH2"]))
-    drows = [[d.get("defect_code",""), d.get("severity","").title(), d.get("location",""), d.get("status","").replace("_"," "), _fmt_date(d.get("target_date"))] for d in ctx.get("defects", [])]
-    if not drows:
-        drows = [["—", "None", "No open defects", "", ""]]
-    story.append(_data_table(["ID", "Severity", "Location", "Status", "Target"], drows, styles,
-                             [20 * mm, 24 * mm, 56 * mm, 34 * mm, 30 * mm]))
-    story.append(Spacer(1, 6))
+    if report_type == "weekly":
+        story.extend(_weekly_sections(ctx, styles))
+
+    if report_type == "completion":
+        story.append(Paragraph("Outstanding Issues — Open Defects", styles["CivH2"]))
+        drows = [[d.get("defect_code",""), d.get("severity","").title(), d.get("location",""), d.get("status","").replace("_"," "), _fmt_date(d.get("target_date"))] for d in ctx.get("defects", [])]
+        if not drows:
+            drows = [["—", "None", "No open defects", "", ""]]
+        story.append(_data_table(["ID", "Severity", "Location", "Status", "Target"], drows, styles,
+                                 [20 * mm, 24 * mm, 56 * mm, 34 * mm, 30 * mm]))
+        story.append(Spacer(1, 6))
 
     if report_type == "cost" or ctx.get("cost"):
         c = ctx.get("cost") or {}

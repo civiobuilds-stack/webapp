@@ -24,6 +24,7 @@ import Trips from "@/pages/Trips";
 import Fleet from "@/pages/Fleet";
 import MyAttendance from "@/pages/MyAttendance";
 import FeatureRequest from "@/pages/FeatureRequest";
+import { FileViewer } from "@/components/AuthImage";
 import { SuperAdminRoute } from "@/components/ProtectedRoute";
 
 function Shell({ children }) {
@@ -97,6 +98,7 @@ function App() {
           <AppRouter />
         </BrowserRouter>
         <Toaster position="top-right" richColors />
+        <FileViewer />
       </AuthProvider>
     </div>
   );

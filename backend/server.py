@@ -120,7 +120,12 @@ async def enforce_active_enterprise(user: dict, request: Optional[Request] = Non
     return user
 
 
-async def user_from_query_token(request: Request, auth: Optional[str]) -> dict:
+async def user_from_query_token(request: Request, auth: Optional[str] = None) -> dict:
+    """Query-string tokens are no longer accepted: authorize with the httpOnly cookie or Bearer header only."""
+    return await get_current_user(request)
+
+
+async def _legacy_query_token(request: Request, auth: Optional[str]) -> dict:
     if auth and "Authorization" not in request.headers:
         try:
             payload = decode_token(auth)
@@ -469,10 +474,31 @@ class POStatusIn(BaseModel):
 
 
 class ReportIn(BaseModel):
-    type: str  # progress | completion | cost
+    type: str  # progress | completion | cost | weekly
     period_start: Optional[str] = None
     period_end: Optional[str] = None
     recommendations: str = ""
+    sections: Optional[List[str]] = None
+
+
+WEEKLY_SECTIONS = ["progress", "work_done", "labour", "materials", "photos", "issues", "next_week"]
+
+
+class WeeklySectionsIn(BaseModel):
+    sections: List[str]
+
+
+@api_router.put("/projects/{project_id}/weekly-report-settings")
+async def weekly_settings(project_id: str, body: WeeklySectionsIn, user: dict = Depends(require_roles("admin", "project_manager"))):
+    project = await get_project_or_403(project_id, user, write=True)
+    import commercial as C
+    if not C._manages(user, project):
+        raise HTTPException(status_code=403, detail="Only the admin or this project's manager can change the weekly report.")
+    bad = set(body.sections) - set(WEEKLY_SECTIONS)
+    if bad or not body.sections:
+        raise HTTPException(status_code=400, detail="Choose at least one valid section.")
+    await db.projects.update_one({"id": project_id}, {"$set": {"weekly_report_sections": body.sections}})
+    return {"sections": body.sections}
 
 
 class EnterpriseRegisterIn(BaseModel):
@@ -1260,15 +1286,27 @@ async def upload_file(file: UploadFile = File(...), project_id: str = Form(None)
     elif user["role"] == "client":
         raise HTTPException(status_code=403, detail="Clients cannot upload files.")
     await enforce_limit(user, "storage")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
+    data = await file.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="File is larger than 15 MB.")
+    kind = sniff_type(data)
+    if not kind:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, HEIC/HEIF images and PDF files are allowed.")
+    if kind in {"heic", "heif"}:
+        try:
+            data = await asyncio.to_thread(heic_to_jpeg, data)
+            kind = "jpg"
+        except Exception as e:
+            logger.error(f"HEIC conversion failed: {e}")
+            raise HTTPException(status_code=400, detail="Could not read this HEIC photo. Please retake or upload a JPEG.")
+    ext = kind
     fid = new_id()
     path = f"{storage.APP_NAME}/uploads/{user['id']}/{fid}.{ext}"
-    data = await file.read()
-    content_type = storage.MIME_TYPES.get(ext, file.content_type or "application/octet-stream")
+    content_type = storage.MIME_TYPES[ext]
     try:
-        result = storage.put_object(path, data, content_type)
+        result = await asyncio.to_thread(storage.put_object, path, data, content_type)
     except Exception as e:
-        logger.error(f"upload failed: {e}")
+        logger.error(f"upload failed for {path}: {e!r}")
         raise HTTPException(status_code=502, detail="File upload failed. Please try again.")
     doc = {
         "id": fid, "storage_path": result["path"], "original_filename": file.filename,
@@ -1322,10 +1360,93 @@ async def project_photos(project_id: str, user: dict = Depends(get_current_user)
     return files
 
 
-@api_router.get("/files/{file_id}/download")
-async def download_file(file_id: str, request: Request, auth: str = Query(None)):
-    # img tags cannot send headers: accept ?auth=<token>
-    user = await user_from_query_token(request, auth)
+MAX_UPLOAD = 15 * 1024 * 1024
+
+
+def sniff_type(data: bytes) -> Optional[str]:
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data[:5] == b"%PDF-":
+        return "pdf"
+    if data[4:8] == b"ftyp" and data[8:12] in {b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"}:
+        return "heic"
+    return None
+
+
+def heic_to_jpeg(data: bytes) -> bytes:
+    import pillow_heif
+    from PIL import Image
+    pillow_heif.register_heif_opener()
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=88)
+    return out.getvalue()
+
+
+def make_thumb(data: bytes) -> bytes:
+    from PIL import Image, ImageOps
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except Exception:
+        pass
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    img.thumbnail((400, 400))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=78)
+    return out.getvalue()
+
+
+async def _fetch_object(path: str):
+    try:
+        return await asyncio.to_thread(storage.get_object, path)
+    except Exception as e:
+        logger.error(f"storage read failed for {path}: {e!r}")
+        raise HTTPException(status_code=502, detail="The file could not be loaded from storage right now. Please retry.")
+
+
+def _cached_response(request: Request, data: bytes, ctype: str, etag: str):
+    headers = {"Cache-Control": "private, max-age=86400", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=data, media_type=ctype, headers=headers)
+
+
+@api_router.get("/files/{file_id}/thumb")
+async def file_thumb(file_id: str, request: Request):
+    user = await get_current_user(request)
+    record = await _authorized_file(file_id, user)
+    if not (record.get("content_type") or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Thumbnails are only available for images.")
+    etag = f'"t-{file_id}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"Cache-Control": "private, max-age=86400", "ETag": etag})
+    if record.get("thumb_path"):
+        data, _ = await _fetch_object(record["thumb_path"])
+    else:
+        original, _ = await _fetch_object(record["storage_path"])
+        try:
+            data = await asyncio.to_thread(make_thumb, original)
+        except Exception as e:
+            logger.error(f"thumbnail failed for {file_id}: {e!r}")
+            return _cached_response(request, original, record.get("content_type", "image/jpeg"), etag)
+        tpath = f"{storage.APP_NAME}/thumbs/{file_id}.jpg"
+
+        async def _cache_thumb():
+            try:
+                await asyncio.to_thread(storage.put_object, tpath, data, "image/jpeg")
+                await db.files.update_one({"id": file_id}, {"$set": {"thumb_path": tpath}})
+            except Exception as e:
+                logger.warning(f"thumbnail cache write failed for {file_id}: {e!r}")
+        asyncio.create_task(_cache_thumb())
+    return _cached_response(request, data, "image/jpeg", etag)
+
+
+async def _authorized_file(file_id: str, user: dict) -> dict:
     record = await db.files.find_one({"id": file_id, "is_deleted": False, "company_id": user["company_id"]}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="File not found")
@@ -1338,8 +1459,18 @@ async def download_file(file_id: str, request: Request, auth: str = Query(None))
                 raise HTTPException(status_code=403, detail="This photo has not been shared with you.")
     elif record.get("uploaded_by") != user["id"] and user["role"] not in MANAGER_ROLES:
         raise HTTPException(status_code=403, detail="You cannot access this file.")
-    data, ctype = storage.get_object(record["storage_path"])
-    return Response(content=data, media_type=record.get("content_type", ctype))
+    return record
+
+
+@api_router.get("/files/{file_id}/download")
+async def download_file(file_id: str, request: Request):
+    user = await get_current_user(request)
+    record = await _authorized_file(file_id, user)
+    etag = f'"f-{file_id}-{record.get("size", 0)}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"Cache-Control": "private, max-age=86400", "ETag": etag})
+    data, ctype = await _fetch_object(record["storage_path"])
+    return _cached_response(request, data, record.get("content_type") or ctype, etag)
 
 
 # ---------------------------------------------------------------------------
@@ -1582,6 +1713,12 @@ async def cost_summary(project_id: str, user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # PDF reports
 # ---------------------------------------------------------------------------
+async def _report_photos(ids):
+    docs = await db.files.find({"id": {"$in": ids}, "is_deleted": False, "content_type": {"$regex": "^image/"}}, {"_id": 0}).to_list(len(ids))
+    fetched = await asyncio.gather(*[asyncio.to_thread(storage.get_object, d["storage_path"]) for d in docs], return_exceptions=True)
+    return [(r[0], d.get("caption") or d.get("original_filename"), d.get("created_at")) for d, r in zip(docs, fetched) if not isinstance(r, Exception)]
+
+
 async def _build_report_ctx(project, rtype, body, user):
     acts = await db.activities.find({"project_id": project["id"]}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     mstones = await db.milestones.find({"project_id": project["id"]}, {"_id": 0}).sort("due_date", 1).to_list(1000)
@@ -1638,9 +1775,10 @@ async def list_reports(project_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/projects/{project_id}/reports")
 async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(require_roles("admin", "project_manager"))):
     project = await get_project_or_403(project_id, user, write=True)
-    if body.type not in {"progress", "completion", "cost"}:
+    if body.type not in {"progress", "completion", "cost", "weekly"}:
         raise HTTPException(status_code=400, detail="Unknown report type.")
-    titles = {"progress": "Construction Progress Report", "completion": "Project Completion Report", "cost": "Project Cost Summary"}
+    titles = {"progress": "Construction Progress Report", "completion": "Project Completion Report", "cost": "Project Cost Summary",
+              "weekly": "Weekly Progress Report"}
     rev_count = await db.reports.count_documents({"project_id": project_id, "type": body.type})
     revision = f"{body.type[:3].upper()}-{rev_count + 1:02d}"
     meta = {
@@ -1651,6 +1789,18 @@ async def generate_report(project_id: str, body: ReportIn, user: dict = Depends(
         "confidential": f"Confidential — {user['_enterprise'].get('display_name') or user['_enterprise']['name']}",
     }
     ctx = await _build_report_ctx(project, body.type, body, user)
+    if body.type == "weekly":
+        end = body.period_end or datetime.now(timezone.utc).date().isoformat()
+        start = body.period_start or (date.fromisoformat(end) - timedelta(days=6)).isoformat()
+        meta["period_start"], meta["period_end"] = start, end
+        ctx["dprs"] = await db.dprs.find({"project_id": project_id, "report_date": {"$gte": start, "$lte": end}, "status": {"$ne": "draft"}},
+                                         {"_id": 0}).sort("report_date", 1).to_list(100)
+        ctx["sections"] = body.sections or project.get("weekly_report_sections") or WEEKLY_SECTIONS
+        if "photos" in ctx["sections"]:
+            ids = [ph["file_id"] for d in ctx["dprs"] for ph in d.get("photos", [])][:12]
+            ctx["photos"] = await _report_photos(ids) if ids else []
+        else:
+            ctx["photos"] = []
     ctx["meta"] = meta
     ctx["brand"] = report_brand(user["_enterprise"])
     pdf_bytes = reports_module.build_report(body.type, ctx)

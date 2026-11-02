@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Upload, Loader2, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { AuthImage } from "@/components/AuthImage";
 
 // Camera-first capture: live camera → capture → preview → retake / upload (with retry). Gallery only if camera is unavailable.
 export function CameraCapture({ projectId, value = [], onChange, label = "Photos", max = 6 }) {
@@ -54,7 +55,7 @@ export function CameraCapture({ projectId, value = [], onChange, label = "Photos
       {mode === "fallback" && <label className="inline-flex"><input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files[0] && upload(e.target.files[0])} data-testid="camera-fallback-input" />
         <Button type="button" asChild size="sm" variant="outline"><span><ImagePlus className="h-4 w-4" /> Choose from gallery</span></Button></label>}
       {value.length > 0 && <div className="grid grid-cols-4 gap-2">{value.map((id) => (
-        <div key={id} className="relative aspect-square overflow-hidden rounded-lg border"><img src={fileUrl(id)} alt="" className="h-full w-full object-cover" />
+        <div key={id} className="relative aspect-square overflow-hidden rounded-lg border"><AuthImage thumb viewer={false} fileId={id} alt="" className="h-full w-full object-cover" />
           <button type="button" onClick={() => onChange(value.filter((v) => v !== id))} className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"><X className="h-3 w-3" /></button></div>))}</div>}
     </div>
   );

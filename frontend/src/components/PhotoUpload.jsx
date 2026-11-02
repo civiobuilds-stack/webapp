@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Upload, X, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
+import { AuthImage, openFile } from "@/components/AuthImage";
 
 export function PhotoUpload({ projectId, value = [], onChange, label = "Site photos" }) {
   const [busy, setBusy] = useState(false);
@@ -49,7 +50,7 @@ export function PhotoUpload({ projectId, value = [], onChange, label = "Site pho
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {value.map((id) => (
             <div key={id} className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
-              <img src={fileUrl(id)} alt="upload" className="h-full w-full object-cover" />
+              <AuthImage thumb viewer={false} fileId={id} alt="upload" className="h-full w-full object-cover" />
               <button type="button" onClick={() => remove(id)} data-testid="remove-photo-btn"
                 className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80">
                 <X className="h-3 w-3" />
@@ -68,9 +69,9 @@ export function PhotoGrid({ photoIds = [], photos = [] }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
       {items.map((id) => (
-        <a key={id} href={fileUrl(id)} target="_blank" rel="noreferrer"
+        <a key={id} href="#" onClick={(e) => { e.preventDefault(); openFile(id); }}
           className="group relative aspect-square overflow-hidden rounded-xl border bg-muted">
-          <img src={fileUrl(id)} alt="site" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          <AuthImage thumb viewer={false} fileId={id} alt="site" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
         </a>
       ))}
     </div>

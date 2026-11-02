@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, API, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { openPath } from "@/components/AuthImage";
 import { useAuth } from "@/context/AuthContext";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -13,7 +14,6 @@ export function AuditTab({ project }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => { api.get(`/projects/${project.id}/audit-log`).then((r) => setLogs(r.data)).catch(() => {}).finally(() => setLoading(false)); }, [project.id]);
 
-  const exportUrl = `${API}/projects/${project.id}/audit-log/export?auth=${getToken()}`;
 
   if (loading) return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>;
 
@@ -22,7 +22,7 @@ export function AuditTab({ project }) {
       <div className="flex items-center justify-between">
         <h3 className="font-heading text-lg font-semibold">Audit log</h3>
         {user.role === "admin" && (
-          <a href={exportUrl} data-testid="export-audit-csv-btn">
+          <a href="#" onClick={(e) => { e.preventDefault(); openPath(`/projects/${project.id}/audit-log/export`); }} data-testid="export-audit-csv-btn">
             <Button variant="outline" size="sm"><Download className="h-4 w-4" /> Export CSV</Button>
           </a>
         )}

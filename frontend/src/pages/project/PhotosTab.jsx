@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { fileUrl } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImageOff } from "lucide-react";
+import { AuthImage, openFile } from "@/components/AuthImage";
 
 export function PhotosTab({ project }) {
   const [photos, setPhotos] = useState([]);
@@ -24,9 +24,9 @@ export function PhotosTab({ project }) {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {photos.map((p) => (
-            <a key={p.id} href={fileUrl(p.id)} target="_blank" rel="noreferrer" data-testid="gallery-photo"
+            <a key={p.id} href="#" onClick={(e) => { e.preventDefault(); openFile(p.id); }} data-testid="gallery-photo"
               className="group relative aspect-square overflow-hidden rounded-xl border bg-muted">
-              <img src={fileUrl(p.id)} alt={p.caption || "site"} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <AuthImage thumb viewer={false} fileId={p.id} alt={p.caption || "site"} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2">
                 <div className="truncate text-[11px] text-white">{p.caption || p.original_filename}</div>
                 <div className="text-[10px] text-white/60">{formatDateTime(p.created_at)}</div>

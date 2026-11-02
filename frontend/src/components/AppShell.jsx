@@ -14,6 +14,7 @@ import { API, getToken } from "@/lib/api";
 import { refreshPush } from "@/lib/push";
 import { cn } from "@/lib/utils";
 import { TrialEnded, SubscriptionBanner } from "@/components/TrialEnded";
+import { AuthImage } from "@/components/AuthImage";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
@@ -54,7 +55,7 @@ export function AppShell({ children }) {
     <nav className="flex flex-col gap-1">
       {user?.enterprise && (
         <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2" data-testid="workspace-badge">
-          {user.enterprise.has_logo && <img src={`${API}/enterprise/logo?auth=${getToken()}`} alt="" className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-0.5" data-testid="workspace-logo" />}
+          {user.enterprise.has_logo && <AuthImage viewer={false} path={`/enterprise/logo`} alt="" className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-0.5" data-testid="workspace-logo" />}
           <div className="min-w-0">
             <div className="truncate text-xs font-semibold text-white">{user.enterprise.display_name || user.enterprise.name}</div>
             <div className="text-[10px] uppercase tracking-widest text-white/50">{user.enterprise.business_type} workspace</div>

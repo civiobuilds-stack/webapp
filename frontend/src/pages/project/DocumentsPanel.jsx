@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileUp, FileText, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { openFile } from "@/components/AuthImage";
 
 export function DocumentsPanel({ project, canAdd, canDelete }) {
   const [docs, setDocs] = useState([]);
@@ -40,7 +41,7 @@ export function DocumentsPanel({ project, canAdd, canDelete }) {
       </div>}
       {docs.length === 0 ? <p className="text-sm text-muted-foreground">No drawings or documents yet.</p> : <div className="divide-y">{docs.map((d) => (
         <div key={d.id} className="flex items-center justify-between gap-2 py-2" data-testid="doc-row">
-          <a href={fileUrl(d.file_id)} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 text-sm hover:underline"><FileText className="h-4 w-4 shrink-0" />
+          <a href="#" onClick={(e) => { e.preventDefault(); openFile(d.file_id); }} className="flex min-w-0 items-center gap-2 text-sm hover:underline"><FileText className="h-4 w-4 shrink-0" />
             <span className="truncate">{d.title}</span><Badge variant="secondary" className="capitalize">{d.category}</Badge></a>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">{d.uploaded_by_name} · {formatDate(d.created_at)}
             {canDelete && <Button size="sm" variant="ghost" onClick={() => del(d.id)} data-testid="doc-delete-btn"><Trash2 className="h-3.5 w-3.5" /></Button>}</div>

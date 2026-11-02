@@ -37,4 +37,3 @@ export function apiError(detail) {
   return String(detail);
 }
 
-export const fileUrl = (id) => `${API}/files/${id}/download?auth=${getToken()}`;

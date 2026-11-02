@@ -196,6 +196,8 @@ class FeatureIn(BaseModel):
 
 @router.post("/feature-requests")
 async def create_feature(body: FeatureIn, user: dict = Depends(S.get_identity)):
+    if user["role"] == "client" or user.get("platform_role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Feature requests are for company employees.")
     if body.priority not in {"low", "medium", "high"}:
         raise HTTPException(status_code=400, detail="Priority must be low, medium or high.")
     ent = await S.db.enterprises.find_one({"id": user.get("company_id")}, {"_id": 0, "id": 1, "name": 1, "business_type": 1})

@@ -6,6 +6,7 @@ import io
 import json
 import os
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict
 from zoneinfo import ZoneInfo
@@ -729,6 +730,7 @@ class DigestSettingsIn(BaseModel):
     hour: int = Field(ge=0, le=23)
     timezone: str = "Asia/Kolkata"
     recipient_ids: List[str] = []
+    extra_emails: List[str] = []
 
 
 async def _digest_settings(cid):
@@ -738,14 +740,14 @@ async def _digest_settings(cid):
 
 @router.get("/digest/settings")
 async def get_digest_settings(user: dict = Depends(commercial_user)):
-    if user["role"] != "admin":
+    if user["role"] not in {"admin", "project_manager"}:
         raise HTTPException(status_code=403, detail="Only an admin can configure the weekly digest.")
     return await _digest_settings(user["company_id"])
 
 
 @router.put("/digest/settings")
 async def put_digest_settings(body: DigestSettingsIn, user: dict = Depends(commercial_user)):
-    if user["role"] != "admin":
+    if user["role"] not in {"admin", "project_manager"}:
         raise HTTPException(status_code=403, detail="Only an admin can configure the weekly digest.")
     try:
         ZoneInfo(body.timezone)
@@ -755,7 +757,10 @@ async def put_digest_settings(body: DigestSettingsIn, user: dict = Depends(comme
         n = await S.db.users.count_documents({"id": {"$in": body.recipient_ids}, "company_id": user["company_id"], "role": {"$in": list(S.MANAGER_ROLES)}})
         if n != len(set(body.recipient_ids)):
             raise HTTPException(status_code=400, detail="Recipients must be admins or project managers of your company.")
-    doc = {**body.model_dump(), "company_id": user["company_id"]}
+    emails = sorted({e.strip().lower() for e in body.extra_emails if e.strip()})
+    if any(not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e) for e in emails):
+        raise HTTPException(status_code=400, detail="One of the email addresses is not valid.")
+    doc = {**body.model_dump(), "extra_emails": emails[:30], "company_id": user["company_id"], "updated_by": user["name"]}
     await S.db.digest_settings.update_one({"company_id": user["company_id"]}, {"$set": doc}, upsert=True)
     return doc
 
@@ -838,6 +843,8 @@ async def run_digest(ent, key, trigger):
         if settings.get("recipient_ids"):
             q["id"] = {"$in": settings["recipient_ids"]}
         users = await S.db.users.find(q, {"_id": 0, "email": 1, "name": 1}).to_list(200)
+        known = {u["email"].lower() for u in users}
+        users += [{"email": e, "name": e.split("@")[0]} for e in settings.get("extra_emails", []) if e not in known]
         data = await build_digest(ent)
         name = ent.get("display_name") or ent["name"]
         results = []

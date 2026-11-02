@@ -39,12 +39,24 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
     return resp.json()
 
 
+_session = requests.Session()
+
+
+def _get(path, key):
+    for attempt in range(2):
+        try:
+            return _session.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=(5, 15))
+        except requests.RequestException:
+            if attempt:
+                raise
+
+
 def get_object(path: str):
     key = init_storage()
-    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp = _get(path, key)
     if resp.status_code == 404:
         key = init_storage(force=True)
-        resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+        resp = _get(path, key)
     resp.raise_for_status()
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 

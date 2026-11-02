@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Loader2, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
+import { openFile } from "@/components/AuthImage";
 
 export async function uploadToProject(projectId, file) {
   const fd = new FormData();
@@ -34,7 +35,7 @@ export function FileAttach({ projectId, value = [], onChange, multiple = true, a
       </label>
       {value.length > 0 && <div className="flex flex-wrap gap-2">{value.map((id) => (
         <span key={id} className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
-          <a href={fileUrl(id)} target="_blank" rel="noreferrer" className="underline">{names[id] || "attachment"}</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); openFile(id); }} className="underline">{names[id] || "attachment"}</a>
           <Button type="button" size="icon" variant="ghost" className="h-4 w-4" onClick={() => onChange(value.filter((x) => x !== id))}><X className="h-3 w-3" /></Button>
         </span>))}</div>}
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { formatINR, formatDate } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { FileAttach } from "@/components/FileAttach";
 import { Plus, Check, X, IndianRupee, Paperclip } from "lucide-react";
 import { toast } from "sonner";
+import { openFile } from "@/components/AuthImage";
 
 export const BILL_STATUS = {
   pending_pm: { label: "Awaiting PM", cls: "bg-amber-50 text-amber-800 border-amber-300" },
@@ -86,7 +87,7 @@ export function BillRow({ b, user, project, onAction, onEdit, showProject }) {
         <div className="text-xs text-muted-foreground">{showProject && `${b.project_name} · `}Bill {b.bill_no} · {formatDate(b.bill_date)} · {b.category}{b.due_date ? ` · due ${formatDate(b.due_date)}` : ""}</div>
         {b.description && <div className="text-xs">{b.description}</div>}
         <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">{(b.history || []).map((h, i) => <span key={i}>{h.status.replace("_", " ")} · {h.by}{h.remarks ? ` — ${h.remarks}` : ""}</span>)}</div>
-        {b.file_ids?.length > 0 && <div className="flex gap-2">{b.file_ids.map((id, i) => <a key={id} href={fileUrl(id)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-primary underline"><Paperclip className="h-3 w-3" />File {i + 1}</a>)}</div>}
+        {b.file_ids?.length > 0 && <div className="flex gap-2">{b.file_ids.map((id, i) => <a key={id} href="#" onClick={(e) => { e.preventDefault(); openFile(id); }} className="flex items-center gap-1 text-xs text-primary underline"><Paperclip className="h-3 w-3" />File {i + 1}</a>)}</div>}
       </div>
       <div className="flex flex-col items-end gap-2">
         <div className="font-mono text-lg font-bold" data-testid="bill-total">{formatINR(b.total)}</div>

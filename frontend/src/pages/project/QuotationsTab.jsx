@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Send, FileText, PenLine, Check, MessageSquare, X } from "lucide-react";
 import { toast } from "sonner";
+import { openPath } from "@/components/AuthImage";
 
 const Q_STATUS = {
   draft: ["Draft", "bg-slate-100 text-slate-700"], sent: ["Awaiting client", "bg-amber-50 text-amber-800"],
@@ -94,7 +95,7 @@ function RespondDialog({ quote, action, onClose, onDone }) {
 function QuoteCard({ q, manages, isClient, onEdit, onSend, onRespond }) {
   const last = q.revisions.at(-1);
   const [label, cls] = Q_STATUS[q.status] || [q.status, ""];
-  const pdf = (rev) => window.open(`${API}/quotations/${q.id}/pdf?rev=${rev}&auth=${getToken()}`, "_blank");
+  const pdf = (rev) => openPath(`/quotations/${q.id}/pdf?rev=${rev}`);
   return (
     <Card className="space-y-3 p-5" data-testid="quote-card">
       <div className="flex flex-wrap items-start justify-between gap-3">

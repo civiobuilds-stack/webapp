@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiError, fileUrl } from "@/lib/api";
+import { api, apiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { FileAttach } from "@/components/FileAttach";
 import { ReasonDialog } from "@/components/ReasonDialog";
 import { Upload, Check, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { openFile } from "@/components/AuthImage";
 
 const D_STATUS = { pending: "bg-amber-50 text-amber-800 border-amber-300", approved: "bg-emerald-50 text-emerald-800 border-emerald-300",
   rejected: "bg-rose-50 text-rose-800 border-rose-300", superseded: "bg-slate-100 text-slate-600 border-slate-300" };
@@ -51,7 +52,7 @@ function DrawingRow({ d, manages, canUpload, onDecide, onRevise }) {
         {d.review && <div className="text-xs">{d.status === "rejected" ? "Rejected" : "Reviewed"} by {d.review.by}{d.review.remarks ? ` — ${d.review.remarks}` : ""}</div>}
       </div>
       <div className="flex flex-wrap gap-1">
-        <Button size="sm" variant="outline" asChild><a href={fileUrl(d.file_id)} target="_blank" rel="noreferrer" data-testid="drawing-view-btn"><ExternalLink className="h-4 w-4" /> View</a></Button>
+        <Button size="sm" variant="outline" asChild><a href="#" onClick={(e) => { e.preventDefault(); openFile(d.file_id); }} data-testid="drawing-view-btn"><ExternalLink className="h-4 w-4" /> View</a></Button>
         {manages && d.status === "pending" && <><Button size="sm" onClick={() => onDecide(d, "approve")} data-testid="drawing-approve-btn"><Check className="h-4 w-4" /> Approve</Button>
           <Button size="sm" variant="outline" onClick={() => onDecide(d, "reject")} data-testid="drawing-reject-btn"><X className="h-4 w-4" /> Reject</Button></>}
         {canUpload && ["approved", "rejected"].includes(d.status) && <Button size="sm" variant="ghost" onClick={() => onRevise(d)} data-testid="drawing-revise-btn">Upload revision</Button>}

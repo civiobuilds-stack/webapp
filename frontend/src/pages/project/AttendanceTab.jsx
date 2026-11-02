@@ -11,6 +11,7 @@ import { LogIn, LogOut, FileDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { LabourSection } from "@/pages/project/LabourSection";
 import { LabourCostPanel } from "@/pages/project/LabourCostPanel";
+import { openPath } from "@/components/AuthImage";
 
 const t = (v) => (v ? new Date(v).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—");
 const local = (v) => (v ? new Date(new Date(v).getTime() + 5.5 * 3600e3).toISOString().slice(0, 16) : "");
@@ -62,7 +63,7 @@ export function AttendanceTab({ project, userId, perms, manages }) {
             : !mine.check_out ? <Button variant="outline" onClick={() => punch("check-out")} data-testid="check-out-btn"><LogOut className="h-4 w-4" /> Check out</Button>
             : <Badge variant="outline" data-testid="attendance-done">Done for today · {mine.hours}h</Badge>)}
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-40" data-testid="attendance-month" />
-          {can(perms, "export") && <a href={`${API}/projects/${project.id}/attendance/export?month=${month}&auth=${getToken()}`}><Button variant="secondary" data-testid="attendance-export-btn"><FileDown className="h-4 w-4" /> CSV</Button></a>}
+          {can(perms, "export") && <a href="#" onClick={(e) => { e.preventDefault(); openPath(`/projects/${project.id}/attendance/export?month=${month}`); }}><Button variant="secondary" data-testid="attendance-export-btn"><FileDown className="h-4 w-4" /> CSV</Button></a>}
         </div>
       </div>
       {sum && (

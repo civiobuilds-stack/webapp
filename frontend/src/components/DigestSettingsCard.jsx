@@ -9,6 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/AuthContext";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -20,10 +22,13 @@ export function DigestSettingsCard() {
     api.get("/digest/settings").then((r) => setS(r.data)).catch(() => {});
     api.get("/digest/logs").then((r) => setLogs(r.data)).catch(() => {});
   };
+  const [emails, setEmails] = useState("");
+  const { user } = useAuth();
+  useEffect(() => { if (s && !emails) setEmails((s.extra_emails || []).join(", ")); /* eslint-disable-next-line */ }, [s]);
   useEffect(() => { load(); api.get("/users").then((r) => setManagers(r.data.filter((u) => ["admin", "project_manager"].includes(u.role)))).catch(() => {}); }, []);
   if (!s) return null;
   const save = async () => {
-    try { await api.put("/digest/settings", { enabled: s.enabled, day_of_week: s.day_of_week, hour: s.hour, timezone: s.timezone, recipient_ids: s.recipient_ids }); toast.success("Digest schedule saved"); }
+    try { await api.put("/digest/settings", { enabled: s.enabled, day_of_week: s.day_of_week, hour: s.hour, timezone: s.timezone, recipient_ids: s.recipient_ids, extra_emails: emails.split(/[\s,;]+/).filter(Boolean) }); toast.success("Digest schedule saved"); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
   const sendNow = async () => { await api.post("/digest/send-now"); toast.success("Digest queued — check the log shortly"); setTimeout(load, 4000); };
@@ -43,7 +48,9 @@ export function DigestSettingsCard() {
         <div className="grid gap-2 sm:grid-cols-2">{managers.map((m) => (
           <label key={m.id} className="flex items-center gap-2 text-sm"><Checkbox checked={s.recipient_ids.includes(m.id)} onCheckedChange={() => toggle(m.id)} data-testid={`digest-recipient-${m.id}`} /> {m.name}</label>
         ))}</div></div>
-      <div className="flex gap-2"><Button onClick={save} data-testid="digest-save-btn">Save schedule</Button><Button variant="outline" onClick={sendNow} data-testid="digest-send-now-btn">Send now</Button></div>
+      <div className="space-y-1.5"><Label>Other email addresses (comma separated, e.g. client or consultant)</Label>
+        <Textarea rows={2} value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="name@company.com, other@firm.in" data-testid="digest-extra-emails" /></div>
+      <div className="flex gap-2"><Button onClick={save} data-testid="digest-save-btn">Save schedule</Button>{user?.role === "admin" && <Button variant="outline" onClick={sendNow} data-testid="digest-send-now-btn">Send now</Button>}</div>
       {logs.length > 0 && <div className="space-y-1 text-xs text-muted-foreground" data-testid="digest-logs">{logs.slice(0, 5).map((l) => (
         <div key={l.id}>{formatDateTime(l.created_at)} · {l.trigger} · <b>{l.status}</b> · {l.recipients?.length || 0} recipient(s)</div>))}</div>}
     </Card>

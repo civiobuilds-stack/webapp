@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandLoader } from "@/components/BrandLoader";
-import { api, fileUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import { BuildTimeline } from "@/pages/homeowner/BuildTimeline";
 import { DecisionCards } from "@/pages/homeowner/DecisionCards";
 import { TeamContactCard } from "@/pages/homeowner/TeamContactCard";
 import { PendingMaterials } from "@/pages/project/MaterialApprovalsTab";
+import { AuthImage, openFile } from "@/components/AuthImage";
 
 function ProgressRing({ value }) {
   const r = 52, c = 2 * Math.PI * r, off = c - (Math.min(100, value) / 100) * c;
@@ -53,8 +54,8 @@ function PhotoStrip({ photos, onOpen }) {
       {photos.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Photos shared by your site team will appear here.</p> : (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {photos.slice(0, 8).map((p) => (
-            <a key={p.id} href={fileUrl(p.id)} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl">
-              <img src={fileUrl(p.id)} alt={p.caption || "Site photo"} className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <a key={p.id} href="#" onClick={(e) => { e.preventDefault(); openFile(p.id); }} className="group overflow-hidden rounded-xl">
+              <AuthImage thumb viewer={false} fileId={p.id} alt={p.caption || "Site photo"} className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105" />
             </a>
           ))}
         </div>

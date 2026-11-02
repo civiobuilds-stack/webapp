@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Camera, Loader2, LogIn, LogOut, MapPin, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { AuthImage } from "@/components/AuthImage";
 
 const time = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—");
 const mapUrl = (c) => `https://www.google.com/maps?q=${c.lat},${c.lng}`;
@@ -74,7 +75,7 @@ function SelfieCheckIn({ status, onDone }) {
 function Row({ r, showName }) {
   return (
     <div className="flex flex-wrap items-center gap-3 p-3" data-testid="att-row">
-      <img src={`${API}/my-attendance/${r.id}/selfie?auth=${getToken()}`} alt="" className="h-12 w-12 rounded-lg object-cover" data-testid="att-selfie" />
+      <AuthImage path={`/my-attendance/${r.id}/selfie`} alt="" className="h-12 w-12 rounded-lg object-cover" data-testid="att-selfie" />
       <div className="min-w-0 flex-1">
         <div className="font-medium">{showName ? r.user_name : formatDate(r.date)} <span className="text-xs text-muted-foreground">· {r.project_name}</span></div>
         <div className="text-xs text-muted-foreground">In {time(r.check_in?.at)} · Out {time(r.check_out?.at)}{r.check_in?.distance_m != null ? ` · ${r.check_in.distance_m} m from site` : ""}</div>

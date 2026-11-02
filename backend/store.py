@@ -428,7 +428,7 @@ async def set_geofence(pid: str, body: GeofenceIn, user: dict = Depends(C.dpr_us
 
 
 @router.post("/projects/{pid}/labour/check-in")
-async def labour_check_in(pid: str, body: LabourIn, user: dict = Depends(C.commercial_user)):
+async def labour_check_in(pid: str, body: LabourIn, user: dict = Depends(C.dpr_user)):
     if not body.labour_incharge.strip():
         raise HTTPException(status_code=400, detail="Enter the labour in-charge name.")
     rec = await _fence(pid, user, body)
@@ -443,7 +443,7 @@ async def labour_check_in(pid: str, body: LabourIn, user: dict = Depends(C.comme
 
 
 @router.post("/labour/{lid}/check-out")
-async def labour_check_out(lid: str, body: LabourIn, user: dict = Depends(C.commercial_user)):
+async def labour_check_out(lid: str, body: LabourIn, user: dict = Depends(C.dpr_user)):
     a = await S.db.labour_attendance.find_one({"id": lid, "company_id": user["company_id"]}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -455,8 +455,11 @@ async def labour_check_out(lid: str, body: LabourIn, user: dict = Depends(C.comm
 
 
 @router.get("/projects/{pid}/labour")
-async def list_labour(pid: str, month: Optional[str] = None, user: dict = Depends(C.commercial_user)):
-    project, _ = await C.require_perm(user, pid, "attendance", "view")
+async def list_labour(pid: str, month: Optional[str] = None, user: dict = Depends(C.dpr_user)):
+    project = await S.get_project_or_403(pid, user)
+    acts = set((await C.perms_for(user, project)).get("attendance", []))
+    if not acts & {"view", "create"}:
+        raise HTTPException(status_code=403, detail="You do not have access to labour attendance on this project.")
     q = {"project_id": pid}
     if month:
         q["date"] = {"$regex": f"^{month}"}
