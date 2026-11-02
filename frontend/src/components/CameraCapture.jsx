@@ -1,62 +1,68 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, apiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Upload, Loader2, ImagePlus, X } from "lucide-react";
+import { RotateCcw, Upload, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { AuthImage } from "@/components/AuthImage";
+import { CameraPicker } from "@/components/CameraPicker";
 
-// Camera-first capture: live camera → capture → preview → retake / upload (with retry). Gallery only if camera is unavailable.
+// Camera-first capture: take photo -> preview -> retake / upload (with retry).
+// Commercial workspaces: camera only. Others: gallery is also offered.
 export function CameraCapture({ projectId, value = [], onChange, label = "Photos", max = 6 }) {
-  const video = useRef(null);
-  const stream = useRef(null);
-  const [mode, setMode] = useState("idle"); // idle | live | preview | uploading | fallback
+  const [mode, setMode] = useState("idle"); // idle | preview | uploading
   const [blob, setBlob] = useState(null);
   const { user } = useAuth();
   const cameraOnly = user?.enterprise?.business_type === "commercial";
-  const stop = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
-  useEffect(() => stop, []);
-  const open = async () => {
-    try {
-      stream.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      setMode("live");
-      setTimeout(() => { if (video.current) { video.current.srcObject = stream.current; video.current.play(); } }, 0);
-    } catch {
-      if (cameraOnly) { setMode("blocked"); toast.error("Camera access is required. Allow camera permission in your browser settings, then tap Try again."); }
-      else { setMode("fallback"); toast.message("Camera unavailable or permission denied — choose a photo from your device instead."); }
-    }
-  };
-  const snap = () => {
-    const v = video.current, c = document.createElement("canvas");
-    c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d").drawImage(v, 0, 0);
-    c.toBlob((b) => { setBlob(b); setMode("preview"); stop(); }, "image/jpeg", 0.85);
-  };
+  const preview = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
   const upload = async (file) => {
     setMode("uploading");
-    const fd = new FormData(); fd.append("file", file, file.name || `site_${Date.now()}.jpg`); fd.append("project_id", projectId);
-    try { const { data } = await api.post("/files/upload", fd); onChange([...value, data.id]); setBlob(null); setMode("idle"); toast.success("Photo saved"); }
-    catch (e) { toast.error(`${apiError(e.response?.data?.detail)} — tap Retry`); setMode(file instanceof File ? "fallback" : "preview"); }
+    const fd = new FormData();
+    fd.append("file", file, file.name || `site_${Date.now()}.jpg`);
+    if (projectId) fd.append("project_id", projectId);
+    try {
+      const { data } = await api.post("/files/upload", fd);
+      onChange([...value, data.id]);
+      setBlob(null); setMode("idle"); toast.success("Photo saved");
+    } catch (e) {
+      toast.error(`${e.response ? apiError(e.response.data?.detail) : "Network problem - check your connection"} - tap Upload / Retry`);
+      setMode("preview");
+    }
   };
-  const preview = blob ? URL.createObjectURL(blob) : null;
+
   return (
     <div className="space-y-2" data-testid="camera-capture">
-      <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-        {mode === "idle" && value.length < max && <Button type="button" size="sm" variant="outline" onClick={open} data-testid="camera-open-btn"><Camera className="h-4 w-4" /> Take photo</Button>}</div>
-      {mode === "live" && <div className="space-y-2"><video ref={video} playsInline muted className="w-full rounded-lg bg-black" data-testid="camera-video" />
-        <div className="flex gap-2"><Button type="button" onClick={snap} data-testid="camera-snap-btn"><Camera className="h-4 w-4" /> Capture</Button>
-          <Button type="button" variant="ghost" onClick={() => { stop(); setMode("idle"); }}>Cancel</Button></div></div>}
-      {(mode === "preview" || (mode === "uploading" && preview)) && <div className="space-y-2"><img src={preview} alt="preview" className="w-full rounded-lg" data-testid="camera-preview" />
-        <div className="flex gap-2"><Button type="button" disabled={mode === "uploading"} onClick={() => upload(new File([blob], `site_${Date.now()}.jpg`, { type: "image/jpeg" }))} data-testid="camera-upload-btn">
-          {mode === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload / Retry</Button>
-          <Button type="button" variant="outline" onClick={() => { setBlob(null); open(); }} data-testid="camera-retake-btn"><RotateCcw className="h-4 w-4" /> Retake</Button></div></div>}
-      {mode === "blocked" && <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" data-testid="camera-blocked">
-        Camera access is required for this photo — gallery upload is not allowed. Allow camera permission for this site, then try again.
-        <div><Button type="button" size="sm" variant="outline" onClick={open} data-testid="camera-retry-btn"><Camera className="h-4 w-4" /> Try again</Button></div></div>}
-      {mode === "fallback" && <label className="inline-flex"><input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files[0] && upload(e.target.files[0])} data-testid="camera-fallback-input" />
-        <Button type="button" asChild size="sm" variant="outline"><span><ImagePlus className="h-4 w-4" /> Choose from gallery</span></Button></label>}
-      {value.length > 0 && <div className="grid grid-cols-4 gap-2">{value.map((id) => (
-        <div key={id} className="relative aspect-square overflow-hidden rounded-lg border"><AuthImage thumb viewer={false} fileId={id} alt="" className="h-full w-full object-cover" />
-          <button type="button" onClick={() => onChange(value.filter((v) => v !== id))} className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"><X className="h-3 w-3" /></button></div>))}</div>}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      </div>
+      {mode === "idle" && value.length < max && (
+        <CameraPicker facing="environment" strict={cameraOnly} onPhoto={(f) => { setBlob(f); setMode("preview"); }} label="Take photo" testId="camera-open-btn" />
+      )}
+      {preview && (mode === "preview" || mode === "uploading") && (
+        <div className="space-y-2">
+          <img src={preview} alt="preview" className="w-full max-w-sm rounded-lg" data-testid="camera-preview" />
+          <div className="flex gap-2">
+            <Button type="button" disabled={mode === "uploading"} onClick={() => upload(blob)} data-testid="camera-upload-btn">
+              {mode === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload / Retry
+            </Button>
+            <Button type="button" variant="outline" disabled={mode === "uploading"} onClick={() => { setBlob(null); setMode("idle"); }} data-testid="camera-retake-btn">
+              <RotateCcw className="h-4 w-4" /> Retake
+            </Button>
+          </div>
+        </div>
+      )}
+      {value.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {value.map((id) => (
+            <div key={id} className="relative aspect-square overflow-hidden rounded-lg border">
+              <AuthImage thumb viewer={false} fileId={id} alt="" className="h-full w-full object-cover" />
+              <button type="button" onClick={() => onChange(value.filter((v) => v !== id))} className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

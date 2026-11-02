@@ -33,6 +33,12 @@ class MatIn(BaseModel):
     unit: str = Field(default="nos", max_length=20)
     required_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     remarks: str = Field(default="", max_length=1000)
+    specification: str = Field(default="", max_length=200)
+    brand: str = Field(default="", max_length=80)
+    delivery_location: str = Field(default="", max_length=200)
+    priority: str = Field(default="normal", pattern=r"^(low|normal|urgent)$")
+    purpose: str = Field(default="", max_length=300)
+    attachment_ids: List[str] = Field(default=[], max_length=5)
 
 
 class MatDecisionIn(BaseModel):
@@ -190,8 +196,19 @@ async def _mat(mid, user):
     return m, await S.get_project_or_403(m["project_id"], user)
 
 
-def _out(m):
-    return {**m, "stage_label": STAGES[m["status"]]}
+CLIENT_MAT_FIELDS = ("id", "item", "specification", "status", "project_id", "project_name", "created_at", "updated_at")
+
+
+def _out(m, user=None):
+    st = "pending_pm" if m["status"] == "pending_client" else m["status"]
+    if user and user["role"] == "client":
+        return {**{k: m.get(k) for k in CLIENT_MAT_FIELDS}, "status": st, "stage_label": STAGES[st]}
+    return {**m, "status": st, "stage_label": STAGES[st]}
+
+
+async def _check_attachments(pid, ids):
+    if ids and await S.db.files.count_documents({"id": {"$in": ids}, "project_id": pid, "is_deleted": False}) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="Attachments must be uploaded to this project.")
 
 
 async def _email_client(p, m):
@@ -216,27 +233,23 @@ async def _log(mid, status, user, remarks, extra=None):
 async def list_mats(pid: str, user: dict = Depends(S.get_current_user)):
     S.require_module(user, "material_approval")
     await S.get_project_or_403(pid, user)
-    q = {"project_id": pid, **({"status": {"$ne": "pending_pm"}} if user["role"] == "client" else {})}
-    return [_out(m) for m in await S.db.material_approvals.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)]
+    return [_out(m, user) for m in await S.db.material_approvals.find({"project_id": pid}, {"_id": 0}).sort("created_at", -1).to_list(1000)]
 
 
 @router.post("/projects/{pid}/material-approvals")
 async def create_mat(pid: str, body: MatIn, user: dict = Depends(S.require_roles("admin", "project_manager", "site_engineer"))):
     S.require_module(user, "material_approval")
     p = await S.get_project_or_403(pid, user, write=True)
-    mgr = user["role"] in S.MANAGER_ROLES
-    if mgr and not p.get("client_id"):
-        raise HTTPException(status_code=400, detail="Link a client to this project before sending material approvals.")
-    ts, status = S.now_iso(), "pending_client" if mgr else "pending_pm"
+    mgr = C._manages(user, p)
+    await _check_attachments(pid, body.attachment_ids)
+    ts, status = S.now_iso(), "approved" if mgr else "pending_pm"
     m = {"id": S.new_id(), "company_id": user["company_id"], "project_id": pid, "project_name": p["name"], **body.model_dump(),
          "status": status, "requested_by": user["id"], "requested_by_name": user["name"], "requested_by_role": user["role"],
          "created_at": ts, "updated_at": ts, "history": [{"status": status, "by": user["name"], "role": user["role"], "at": ts, "remarks": body.remarks}]}
     await S.db.material_approvals.insert_one(m)
     m.pop("_id", None)
     await S.log_audit(pid, user, "raised material request", "material_approval", m["id"], f"{body.quantity} {body.unit} {body.item}")
-    if mgr:
-        await _email_client(p, m)
-    elif p.get("project_manager_id"):
+    if not mgr and p.get("project_manager_id"):
         await S.notify(p["project_manager_id"], "material_approval", f"{user['name']} requested {body.quantity} {body.unit} {body.item} — review needed.",
                        pid, link=f"/projects/{pid}?tab=materials", push=True)
     return _out(m)
@@ -246,18 +259,16 @@ async def create_mat(pid: str, body: MatIn, user: dict = Depends(S.require_roles
 async def pm_decide(mid: str, body: MatDecisionIn, user: dict = Depends(managers)):
     m, p = await _mat(mid, user)
     await S.get_project_or_403(p["id"], user, write=True)
-    if m["status"] != "pending_pm" or body.action not in {"submit", "reject"}:
+    if not C._manages(user, p):
+        raise HTTPException(status_code=403, detail="Only the owner or this project's manager can decide.")
+    if m["status"] not in {"pending_pm", "pending_client"} or body.action not in {"approve", "submit", "reject"}:
         raise HTTPException(status_code=400, detail="This request is not awaiting PM review.")
     if body.action == "reject" and not body.remarks.strip():
         raise HTTPException(status_code=400, detail="Add remarks when rejecting.")
-    if body.action == "submit" and not p.get("client_id"):
-        raise HTTPException(status_code=400, detail="Link a client to this project first.")
-    status = "pending_client" if body.action == "submit" else "rejected"
+    status = "rejected" if body.action == "reject" else "approved"
     await _log(mid, status, user, body.remarks, {"pm_by": user["id"], "pm_remarks": body.remarks})
     await S.log_audit(p["id"], user, f"material request {status}", "material_approval", mid, body.remarks)
     m = (await _mat(mid, user))[0]
-    if status == "pending_client":
-        await _email_client(p, m)
     await S.notify(m["requested_by"], "material_approval", f"Your material request for {m['item']}: {STAGES[status]}.", p["id"],
                    link=f"/projects/{p['id']}?tab=materials", push=True)
     return _out(m)
@@ -265,6 +276,7 @@ async def pm_decide(mid: str, body: MatDecisionIn, user: dict = Depends(managers
 
 @router.post("/material-approvals/{mid}/client")
 async def client_decide(mid: str, body: MatDecisionIn, user: dict = Depends(S.require_roles("admin", "client"))):
+    raise HTTPException(status_code=410, detail="Client approval of material requests has been removed. The PM or owner decides.")
     m, p = await _mat(mid, user)
     if user["role"] == "client" and p.get("client_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Only this project's client can decide.")
@@ -286,6 +298,21 @@ async def pending_mats(user: dict = Depends(S.get_current_user)):
     if "material_approval" not in S.MODULES.get(user["_enterprise"].get("business_type"), set()):
         return []
     pids = [p["id"] for p in await S.list_projects(user)]
-    st: List[str] = ["pending_client"] if user["role"] == "client" else ["pending_pm", "pending_client"]
-    items = await S.db.material_approvals.find({"project_id": {"$in": pids}, "status": {"$in": st}}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return [_out(m) for m in items]
+    if user["role"] == "client":
+        return []
+    items = await S.db.material_approvals.find({"project_id": {"$in": pids}, "status": {"$in": ["pending_pm", "pending_client"]}}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [_out(m, user) for m in items]
+
+
+@router.put("/material-approvals/{mid}")
+async def edit_mat(mid: str, body: MatIn, user: dict = Depends(S.get_current_user)):
+    m, p = await _mat(mid, user)
+    if m["requested_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the requester can edit this request.")
+    if m["status"] not in {"pending_pm", "pending_client"}:
+        raise HTTPException(status_code=400, detail="The PM has already decided — this request can no longer be edited.")
+    await _check_attachments(p["id"], body.attachment_ids)
+    await S.db.material_approvals.update_one({"id": mid}, {"$set": {**body.model_dump(), "updated_at": S.now_iso()},
+                                                          "$push": {"history": {"status": m["status"], "by": user["name"], "role": user["role"], "at": S.now_iso(), "remarks": "Edited by requester"}}})
+    await S.log_audit(p["id"], user, "edited material request", "material_approval", mid, body.item)
+    return _out((await _mat(mid, user))[0], user)

@@ -433,11 +433,17 @@ class DefectStatusIn(BaseModel):
 
 
 class MaterialRequestIn(BaseModel):
-    item: str
-    quantity: float
+    item: str = Field(min_length=1, max_length=120)
+    quantity: float = Field(gt=0)
     unit: str = "nos"
-    needed_by: Optional[str] = None
+    needed_by: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     notes: str = ""
+    specification: str = Field(default="", max_length=200)
+    brand: str = Field(default="", max_length=80)
+    delivery_location: str = Field(default="", max_length=200)
+    priority: str = Field(default="normal", pattern=r"^(low|normal|urgent)$")
+    purpose: str = Field(default="", max_length=300)
+    attachment_ids: List[str] = Field(default=[], max_length=5)
 
 
 class MaterialDecisionIn(BaseModel):
@@ -1543,12 +1549,27 @@ async def enrich_mr(m: dict) -> dict:
 @api_router.get("/projects/{project_id}/material-requests")
 async def list_material_requests(project_id: str, user: dict = Depends(get_current_user)):
     project = await get_project_or_403(project_id, user)
-    if user["role"] == "client" and not project.get("client_budget_visible"):
-        raise HTTPException(status_code=403, detail="Procurement is not shared for this project.")
     items = await db.material_requests.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    if user["role"] == "client":
+        return [{k: m.get(k) for k in ("id", "item", "specification", "status", "created_at")} for m in items]
     for m in items:
         await enrich_mr(m)
     return items
+
+
+@api_router.put("/material-requests/{mr_id}")
+async def edit_material_request(mr_id: str, body: MaterialRequestIn, user: dict = Depends(get_current_user)):
+    mr = await db.material_requests.find_one({"id": mr_id}, {"_id": 0})
+    if not mr:
+        raise HTTPException(status_code=404, detail="Request not found")
+    await get_project_or_403(mr["project_id"], user, write=True)
+    if mr["requested_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the requester can edit this request.")
+    if mr["status"] != "requested":
+        raise HTTPException(status_code=400, detail="The PM has already decided — this request can no longer be edited.")
+    await db.material_requests.update_one({"id": mr_id}, {"$set": body.model_dump(), "$push": {"history": {"status": "requested", "by": user["name"], "at": now_iso(), "note": "Edited by requester"}}})
+    await log_audit(mr["project_id"], user, "edited material request", "material_request", mr_id, body.item)
+    return await enrich_mr(await db.material_requests.find_one({"id": mr_id}, {"_id": 0}))
 
 
 @api_router.post("/projects/{project_id}/material-requests")
@@ -2237,6 +2258,9 @@ async def migrate_multitenant():
     await db.enterprises.create_index("id", unique=True)
     await db.staff_attendance.create_index([("user_id", 1), ("date", 1)], unique=True)
     await db.subscription_email_log.create_index("key", unique=True)
+    await db.material_approvals.update_many({"status": "pending_client"}, {"$set": {"status": "pending_pm"},
+                                            "$push": {"history": {"status": "pending_pm", "by": "System", "role": "system", "at": now_iso(), "remarks": "Client approval step removed — returned to PM"}}})
+    await db.users.update_many({"role": {"$ne": "client"}, "is_active": {"$ne": False}, "attendance_required": {"$exists": False}}, {"$set": {"attendance_required": True}})
     async for t in db.vehicle_requests.find({"from_date": {"$exists": False}, "trip_date": {"$exists": True}}, {"_id": 0, "id": 1, "trip_date": 1, "drop": 1}):
         await db.vehicle_requests.update_one({"id": t["id"]}, {"$set": {"from_date": t["trip_date"], "to_date": t["trip_date"], "destination": t.get("drop") or ""}})
     await db.vehicle_requests.update_many({"status": "completed"}, {"$set": {"status": "returned"}})

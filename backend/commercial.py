@@ -69,6 +69,8 @@ def route_module(method, path):
         return mod, "view"
     if any(w in p for w in _APPROVE_WORDS):
         return mod, "approve"
+    if mod == "procurement" and method == "PUT" and ("material-requests/" in p or "material-approvals/" in p):
+        return mod, "create"
     return mod, "edit" if method in {"PUT", "PATCH", "DELETE"} else "create"
 ACTIONS = ["view", "create", "edit", "submit", "approve", "export", "delete"]
 ENGINEER_DEFAULT = {"dpr": ["view", "create", "edit", "submit"], "attendance": ["view", "create"], "store": ["view", "create"], "vehicles": ["view", "create"]}
